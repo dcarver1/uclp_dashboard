@@ -70,11 +70,23 @@ site_table <- tibble(site_code = c("sfm", "chd", "pfal", "pbd", "pbr_fc", "pman_
                      color = c("#002EA3", "#E70870", "#256BF5", "#1E4D2B", "#56104E", "#FFCA3A"))
 
 #CDWR sites we are interested in
-cdwr_upper_clp_sites <- c(   "LAPLODCO", "JOEBELCO", "JWCCHACO", "CLANSECO", "CLANLICO", "NPRCANCO", #Upper CLP Basin sites
-                             "MUNCANCO","CLANHACO", "NOCALACO", "CLASRKCO", "CLAFTCCO", #Upper CLP Basin sites
-                             "HOROUTCO", "HSCCLPCO", #Lower CLP Diversions (Horsetooth)
-                             "LAPTUNCO", "CAPDCPCO" #laramie river basin
-)
+cdwr_lookup_table <- tibble(
+  site_abbrev = c(   "LAPLODCO", "JOEBELCO", "JWCCHACO", "CLANSECO", "CLANLICO", "NPRCANCO", #Upper CLP Basin sites
+                     "MUNCANCO","CLANHACO", "NOCALACO", "CLASRKCO", "CLAFTCCO", #Upper CLP Basin sites
+                     "HOROUTCO", "HSCCLPCO", #Lower CLP Diversions (Horsetooth)
+                     "LAPTUNCO", "CAPDCPCO" #laramie river basin
+  ),
+  site_title = c("Long Draw Outflow", "Joe Wright Reservoir Outflow", "Chambers Lake Outflow", "NF below Seaman", "NF at Livermore", "North Poudre Canal", #Upper CLP Basin sites
+                 "Munroe Canal","NF above Halligan", "NF below Halligan", "South Fork CLP", "Canyon Mouth", #Upper CLP Basin sites
+                 "Horsetooth Outflow", "Hansen Supply Canal to Poudre", #Lower CLP Diversions (Horsetooth)
+                 "Laramie River Tunnel", "Michigan Ditch" #laramie river basin
+  ))
+
+#Just Isolate the site abbrevs
+cdwr_upper_clp_sites <- cdwr_lookup_table%>%pull(site_abbrev)
+
+
+cdwr_api_key <- read_yaml("creds/CDWRCreds.yml")$api_key
 
 water_chem <- read_parquet("data/chem/ROSS_FC_water_chemistry.parquet")
 
