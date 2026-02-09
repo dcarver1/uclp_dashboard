@@ -1,10 +1,10 @@
 #' @title CDWR Flow Data Plot including statistics
 #'
 #' @description
-#' Downloads flow data from the Colorado Division of Water Resources (CDWR) API, using the CDSSR package (https://github.com/anguswg-ucsb/cdssr)
+#' Downloads flow data from the Colorado Division of Water Resources (CDWR) API, using the CDSSR package (`https://github.com/anguswg-ucsb/cdssr`)
 #' and creates a plotly plot with the current year's flow data, and statistics (min, median, max, and quantiles) for the specified number of years.
 #' Attempt was to mirror the plots from SNOTEL stations
-#' (ie: https://nwcc-apps.sc.egov.usda.gov/awdb/basin-plots/POR/WTEQ/assocHUC2/10_Missouri_Region.html?hideAnno=true&hideControls=true&activeOnly=true&showYears=2025)
+#' (ie: `https://nwcc-apps.sc.egov.usda.gov/awdb/basin-plots/POR/WTEQ/assocHUC2/10_Missouri_Region.html?hideAnno=true&hideControls=true&activeOnly=true&showYears=2026`)
 #'
 #' Sites with very few years of data (<5) or no data will not work properly. Additionally, only streamflow sites will work (ie no reservoir levels)
 #'
@@ -18,8 +18,10 @@
 #' @param incl_winter Logical for whether winter data (Dec-Feb) should be included.
 #'                    High elevation gages typically have ice issues and can not be as reliable
 #'
-#' @param min_val Numeric adjusting the minimum value of the y-axis. Defaults to 0.1.
+#' @param min_val Numeric adjusting the minimum value of the y-axis. Defaults to 1.
 #'                This is useful for gages that have very low flows or few years of data
+#'
+#' @param api_key String for CDWR API key. Default is read from "creds/CDWRCreds.yml". Please provide a valid API key to access CDWR data.
 #'
 #' @return A plotly plot with:
 #' - Log y axes
@@ -61,13 +63,16 @@
 #'                          incl_winter = F,
 #'                          min_val = 10)
 
-create_rainbow_flow_plot <- function(station_abbrev, station_plot_name, years = 30, incl_winter = T, min_val = 0.1){
+create_rainbow_flow_plot <- function(station_abbrev, station_plot_name, years = 30, incl_winter = T, min_val = 1,
+                                     api_key = read_yaml("creds/CDWRCreds.yml")$api_key) {
 
   if(!is.character(station_abbrev) | !is.character(station_plot_name)){
     stop("station_abbrev and station_plot_name must be character strings.")
   }
 
-
+  if(is.null(api_key)){
+    stop("API key is required to access CDWR data. Please provide a valid API key. Default is stored at `creds/CDWRCreds.yml`. ")
+  }
   #loading packages
   if (!require(cdssr, quietly = TRUE)) {
     library(cdssr)
@@ -79,7 +84,6 @@ create_rainbow_flow_plot <- function(station_abbrev, station_plot_name, years = 
     `%nin%` = Negate(`%in%`)
   }
 
-
   #find the min date of the X years ago
   start_date = paste0((year(Sys.Date()) - as.numeric(years)), "-01-01")
   #find the max date of this year
@@ -90,6 +94,7 @@ create_rainbow_flow_plot <- function(station_abbrev, station_plot_name, years = 
     abbrev = station_abbrev,
     start_date = start_date,
     end_date = end_date,
+    api_key = api_key,
     timescale = "day")%>%
     select(datetime, value, flag_a, flag_b, flag_c, flag_d)%>%
     #clean up dates and filter values to be greater than min val
