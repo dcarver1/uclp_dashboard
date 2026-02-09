@@ -1,0 +1,61 @@
+season,site,parameter,t_mean01,t_mean99,t_slope_behind_01,t_slope_behind_99,t_sd_0199
+fall_baseflow,pbr_fc,Chl-a Fluorescence,0.01,4.49,-0.034513333,0.03094,1.159895866
+monsoon,pbr_fc,Chl-a Fluorescence,0.05,1.84,-0.009333333,0.008666667,0.255464832
+snowmelt,pbr_fc,Chl-a Fluorescence,0.14,6.222,-0.445393333,0.465586667,0.943395252
+winter_baseflow,pbr_fc,Chl-a Fluorescence,0.0775,30.3475,-2.2555,2.298173333,4.374932065
+fall_baseflow,pman_fc,Chl-a Fluorescence,-0.02,0.68,-0.04092,0.02852,0.132307375
+monsoon,pman_fc,Chl-a Fluorescence,0.05,1.35,-0.009333333,0.010666667,0.214898646
+snowmelt,pman_fc,Chl-a Fluorescence,0.22,15.4554,-0.314513333,0.35616,2.875531733
+winter_baseflow,pman_fc,Chl-a Fluorescence,0.07,10.8788,-0.106446667,0.081726667,2.021456019
+snowmelt,pbr_fc,Chl-a ugl,0.98,7.7792,-0.223733333,0.2008,1.618181938
+monsoon,pman_fc,Chl-a ugl,0.93,1.7856,-0.022553333,0.02144,0.196607038
+snowmelt,pman_fc,Chl-a ugl,0.85,75.9402,-1.64588,1.876746667,13.87065327
+winter_baseflow,pman_fc,Chl-a ugl,0.8429,40.2381,-0.389013333,0.298,7.660007984
+fall_baseflow,pbr_fc,DO,8.26,11.79,-0.004666667,0.003333333,0.907236043
+monsoon,pbr_fc,DO,7.3,9.08,-0.005333333,0.003333333,0.444641989
+snowmelt,pbr_fc,DO,7.75,11.22,-0.0085,0.005333333,0.682598591
+winter_baseflow,pbr_fc,DO,8.51,11.866,-0.00672,0.005333333,0.717888302
+fall_baseflow,pman_fc,DO,8.35,12.1,-0.007946667,0.002666667,0.845716969
+monsoon,pman_fc,DO,7.45,9.34,-0.01252,0.003333333,0.376665783
+snowmelt,pman_fc,DO,6.2998,11.28,-0.04208,0.024933333,0.641538064
+winter_baseflow,pman_fc,DO,8.7,12.52,-0.01072,0.004666667,0.835431321
+fall_baseflow,pbr_fc,pH,7.31,8.06,-0.003333333,0.002666667,0.150631535
+monsoon,pbr_fc,pH,6.99,8.25,-0.005333333,0.004666667,0.19237613
+snowmelt,pbr_fc,pH,6.67,8.06,-0.004666667,0.004,0.167311358
+winter_baseflow,pbr_fc,pH,7.47,8.71,-0.006666667,0.003333333,0.237810121
+fall_baseflow,pman_fc,pH,7.59,8.04,-0.0021,0.002666667,0.104179111
+monsoon,pman_fc,pH,7.35,7.95,-0.006666667,0.006,0.125241304
+snowmelt,pman_fc,pH,7.17,7.82,-0.003333333,0.004,0.128976625
+winter_baseflow,pman_fc,pH,1.46,9.53,-0.053286667,0.056293333,1.310742501
+fall_baseflow,pbr_fc,Specific Conductivity,64,86,-0.333333333,0.266666667,4.583199775
+monsoon,pbr_fc,Specific Conductivity,30.6,99,-0.628,1.066666667,8.191002846
+snowmelt,pbr_fc,Specific Conductivity,23.6,104,-0.471333333,0.693866667,15.17388097
+winter_baseflow,pbr_fc,Specific Conductivity,42.589,112,-0.066666667,0.066666667,17.69671291
+fall_baseflow,pman_fc,Specific Conductivity,0,92,-1.866666667,1.735333333,16.24139387
+monsoon,pman_fc,Specific Conductivity,0,78,-2.133333333,2.263333333,11.30556237
+snowmelt,pman_fc,Specific Conductivity,10,82,-0.4,0.555333333,15.28596242
+winter_baseflow,pman_fc,Specific Conductivity,48.09,126,-0.133333333,0.2,19.22843296
+fall_baseflow,pbr_fc,TAL PC Fluorescence,0.07,1.61,-0.010666667,0.010446667,0.380068457
+monsoon,pbr_fc,TAL PC Fluorescence,0.1,1.01,-0.008666667,0.007333333,0.180805421
+snowmelt,pbr_fc,TAL PC Fluorescence,0.23,2.56,-0.015333333,0.015446667,0.54805794
+winter_baseflow,pbr_fc,TAL PC Fluorescence,0.25,3.1875,-0.266293333,0.205333333,0.508332615
+fall_baseflow,pman_fc,TAL PC Fluorescence,0.2,1.6569,-0.048666667,0.050453333,0.32968509
+monsoon,pman_fc,TAL PC Fluorescence,0.07,1.1,-0.010666667,0.009846667,0.20142464
+snowmelt,pman_fc,TAL PC Fluorescence,0.14,21.186,-0.114266667,0.086066667,3.173973246
+winter_baseflow,pman_fc,TAL PC Fluorescence,0.12,0.24,-0.00464,0.005333333,0.023884821
+fall_baseflow,pbr_fc,Temperature,0,12.9,-0.013333333,0.02,3.16391248
+monsoon,pbr_fc,Temperature,9.4,20,-0.013333333,0.026666667,1.939833225
+snowmelt,pbr_fc,Temperature,2.4,13.86442,-0.013333333,0.026666667,2.690680513
+winter_baseflow,pbr_fc,Temperature,-2.00E-05,11.8,-0.013333333,0.026666667,2.601921951
+fall_baseflow,pman_fc,Temperature,-3.1,14.2,-0.026666667,0.046666667,4.104727469
+monsoon,pman_fc,Temperature,3.329,22,-0.053333333,0.113333333,2.842999091
+snowmelt,pman_fc,Temperature,2,15.5,-0.013333333,0.02,2.668401724
+winter_baseflow,pman_fc,Temperature,-1.8,13,-0.013333333,0.026666667,3.060098098
+fall_baseflow,pbr_fc,Turbidity,0.4,5,-0.133333333,0.2,0.664306412
+monsoon,pbr_fc,Turbidity,0.2,161.672,-4.724,4.184266667,15.67958752
+snowmelt,pbr_fc,Turbidity,1.49,93,-1.70304,1.352666667,12.6130958
+winter_baseflow,pbr_fc,Turbidity,0.8,90.44,-0.666666667,0.970666667,8.729141729
+fall_baseflow,pman_fc,Turbidity,0,15,-8.533333333,6.366666667,1.208461457
+monsoon,pman_fc,Turbidity,0,263,-7.266666667,10.56666667,21.43011365
+snowmelt,pman_fc,Turbidity,2,646.91,-6.084666667,7.8924,44.96290521
+winter_baseflow,pman_fc,Turbidity,0,114.832,-4.298,4.603213333,11.28539889

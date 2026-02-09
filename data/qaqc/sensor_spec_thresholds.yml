@@ -1,0 +1,39 @@
+"Actual Conductivity":
+  min: 0
+  max: 350000
+"Baro":
+  min: 300
+  max: 1100
+"Battery Level":
+  min: 0
+  max: 100
+"Chl-a Fluorescence":
+  min: 0
+  max: 100
+"Depth":
+  min: 0
+  max: 30
+"DO":
+  min: 0
+  max: 60
+"External Voltage":
+  min: -10
+  max: 100
+"FDOM Fluorescence":
+  min: 0
+  max: 100
+"ORP":
+  min: -1.400
+  max: 1.400
+"pH":
+  min: 0
+  max: 14
+"Specific Conductivity":
+  min: 0
+  max: 350000
+"Temperature":
+  min: -5
+  max: 50
+"Turbidity":
+  min: 0
+  max: 4000
