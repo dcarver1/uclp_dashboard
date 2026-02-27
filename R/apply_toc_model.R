@@ -54,104 +54,116 @@
 apply_toc_model <- function(sensor_data, toc_model_file_path, scaling_params_file_path, summarize_interval = "1 hour",
                             time_col = "DT_round", site_col = "site", parameter_col = "parameter", value_col = "mean"){
 
+  #Load TOC model
+  toc_models <- read_ext(toc_model_file_path)
   # Define features for prediction (same order as training)
-  features <- c('FDOM', 'Sensor_Turb',"log_sensor_turb" ,  'Sensor_Cond', 'Chl_a','Temp','f_c_turb', "log_chl_a")
-  # Define target
+  features <- toc_models[[1]]$feature_names # extract feature names from the first model (assuming all models have the same features)
+  # Define target variable name
   target <- 'TOC'
-  # Load saved scaling parameters and model
-  scaling_params <- readRDS(scaling_params_file_path)
-
-  # Helper function to apply training scale
-  apply_training_scale <- function(data,mod_features,  scaling_params, direction) {
-
-    scaled_data <- data
-
-    for (col in mod_features) {
-      min_val <- scaling_params[[paste0(col, "_min")]]
-      max_val <- scaling_params[[paste0(col, "_max")]]
-
-      if(direction == "normalize"){
-        # Normalize: (x - min) / (max - min)
-        scaled_data[[col]] <- (data[[col]] - min_val) / (max_val - min_val)
-      } else {
-        # Denormalize: x * (max - min) + min
-        scaled_data[[col]] <- data[[col]] * (max_val - min_val) + min_val
-      }
-
-    }
-
-    return(scaled_data)
-  }
 
   # Process the new data to match model requirements
   processed_sensor_data <- sensor_data %>%
     select(!!sym(time_col), !!sym(site_col), !!sym(parameter_col), !!sym(value_col)) %>%
     distinct()%>%
-    #filter(!is.na(!!sym(value_col)))%>%
+    mutate(!!sym(value_col) := case_when( !!sym(parameter_col) == "Turbidity" & !!sym(value_col) < 0.1 ~ 0.1,
+                                          !!sym(parameter_col) == "Turbidity" & !!sym(value_col) > 1000 ~ 1000,
+                                          TRUE ~ !!sym(value_col)))%>%
     pivot_wider(names_from = !!sym(parameter_col), values_from = !!sym(value_col))%>%
+    apply_fdom_corrections(fdom_col = "FDOM Fluorescence", temp_col = "Temperature", turb_col = "Turbidity",
+                           fdom_temp_col = "FDOMc", fdom_turb_col = "FDOM_turb_corr", fdom_final_col = "FDOM_final_corr")%>%
+    mutate(fdom_x_sc = FDOMc * `Specific Conductivity`,
+           fdom_x_turb = FDOMc * Turbidity)%>%
     #fix site names to match model
     select(!!sym(time_col), !!sym(site_col),
-           #hrs_since_last_cleaning, # no longer used in the current model
-           FDOM = `FDOM Fluorescence`,
-           Temp = Temperature,
-           Sensor_Cond = `Specific Conductivity`,
-           Sensor_Turb = Turbidity,
-           Chl_a = `Chl-a Fluorescence`)%>%
-    mutate(#capping sensor turb at 1000 for outliers
-      Sensor_Turb = ifelse(Sensor_Turb > 1000, 1000,
-                           ifelse(Sensor_Turb == 0, 0.01, Sensor_Turb)), # if turb is zero, replace with 0.01 to avoid division by zero
-      log_sensor_turb = log(Sensor_Turb),
-      Chl_a = ifelse(Chl_a == 0,0.001, Chl_a),# if Chl_A is zero, replace with 0.001 to avoid division by zero
-      log_chl_a = log(Chl_a),
-      #compute optical bands
-      f_c_turb = FDOM/(Chl_a + Sensor_Turb + FDOM),
+           any_of(features))%>%
+    mutate(date = as_date(!!sym(time_col)))
 
-      #round DT to summarize interval
-      !!sym(time_col) := round_date(!!sym(time_col), unit = summarize_interval))%>%
-    #summarize to the specified interval
-    summarize(across(all_of(c(features)), median, na.rm = TRUE),.by = c(!!sym(site_col), !!sym(time_col)))
+  canyon_q <- cdssr::get_telemetry_ts(abbrev = "CLAFTCCO",
+                                        start_date = min(processed_sensor_data[[time_col]], na.rm = TRUE) - days(1),
+                                        end_date = max(processed_sensor_data[[time_col]], na.rm = TRUE) + days(1),
+                                        api_key = cdwr_api_key,
+                                      timescale = "hour")%>%
+    mutate(date = as_date(datetime))%>%
+    summarize(canyon_mouth_daily_flow_cfs = mean(meas_value, na.rm = TRUE), .by = date)
+    #TODO:Import daily canyon mouth flow from CDWR and merge to model input data to improve predictions at canyon mouth site.
+    #This will require some additional processing to align the flow data with the sensor data (e.g. summarizing to daily, merging on date, etc.)
 
-  model_input_data <-  processed_sensor_data %>%
+
+    model_input_data <-  processed_sensor_data %>%
+      left_join(canyon_q, by = "date")%>%
     na.omit() # remove any rows missing needed values
 
+  # Load saved scaling parameters and model
+  scaling_params <- read_ext(scaling_params_file_path)
+
   #Apply scaling normalization and convert to matrix
-  model_input_matrix <- model_input_data %>%
-    apply_training_scale(features, scaling_params = scaling_params, direction = "normalize") %>%
-    select(all_of(features)) %>%
-    mutate(across(everything(), as.numeric)) %>%
-    as.matrix()
+  summarized_data <- model_input_data %>%
+    apply_training_scale(new_data = ., scaling_params = scaling_params,features = features) %>%
+    mutate( !!sym(time_col) := round_date(!!sym(time_col), unit = summarize_interval))%>%
+    #summarize to the specified interval
+    summarize(across(any_of(c(features)), median, na.rm = TRUE),.by = c(!!sym(site_col), !!sym(time_col)))
 
-  #Load Models
-  #TODO Move to global file
-  toc_models <- readRDS(file = toc_model_file_path)
+  target_col = "TOC"
+  #Using each model, make a prediction on the da
+  summarized_data <- imap_dfc(toc_models, ~{
 
-  # Add predictions from each fold model as new columns
-  for (i in seq_along(toc_models)) {
-    fold_model <- toc_models[[i]]
-    col_name <- glue("{target}_guess_fold{i}")
-    model_input_data[[col_name]] <- predict(fold_model, model_input_matrix, iteration_range = c(1,fold_model$best_iteration))
-
-  }
-
-  # Create ensemble mean
-  fold_cols <- glue("{target}_guess_fold{seq_along(toc_models)}")
-  ensemble_col <- glue("{target}_guess_ensemble")
-  model_input_data[[ensemble_col]] <- rowMeans(model_input_data[fold_cols], na.rm = TRUE)
-
-  #Find all sensor data that is not in model input data (e.g. missing values)
-  missing_vals <- anti_join(processed_sensor_data, model_input_data)
+    feature_data <- summarized_data %>%
+      select(all_of(features)) %>%
+      mutate(across(everything(), as.numeric))
 
 
-  # make min and max toc guess col based on fold guesses
-  final_dataset <- model_input_data %>%
-    bind_rows(missing_vals) %>%
-    mutate(!!glue("{target}_guess_min") := pmin(!!!syms(fold_cols)),
-           !!glue("{target}_guess_max") := pmax(!!!syms(fold_cols)))%>%
-    mutate(!!glue("{target}_guess_ensemble") := pmax(0, !!sym(glue("{target}_guess_ensemble"))))%>%
-    arrange(!!sym(site_col), !!sym(time_col))
+    #Check for missing values in features
+    has_na <- rowSums(is.na(feature_data)) > 0
 
-# Return the data with TOC predictions
-return(final_dataset)
+    # Make preds using a single model
+    raw_preds <- feature_data %>%
+      as.matrix()%>%
+      predict(.x, ., iteration_range = c(1, .x$best_iteration)) %>%
+      round(2)
+
+    # make preds NA where features had NA
+    final_preds <- if_else(has_na, NA_real_, raw_preds)
+
+    # Get predictions as tibble
+    tibble(!!glue("{target_col}_guess_fold{.y}") := final_preds)
+
+  }) %>%
+    bind_cols(summarized_data, .)%>%
+    # compute ensemble mean
+    mutate(
+      !!glue("{target_col}_guess_ensemble") := if_else(
+        if_any(all_of(features), is.na),                # Check if ANY feature is NA
+        NA_real_,                                                        # If true, set ensemble to NA
+        round(rowMeans(across(matches(glue("{target_col}_guess_fold")))), 2) # Else, compute mean
+      )
+    )
+  # Columns with fold predictions
+  fold_cols <- grep(glue("{target_col}_guess_fold"), colnames(summarized_data), value = TRUE)
+
+  start_DT <- min(sensor_data[[time_col]], na.rm = TRUE)
+  end_DT <- max(sensor_data[[time_col]], na.rm = TRUE)
+
+  final_dataset <- summarized_data %>%
+    # Filter to desired time window first
+    filter(between(!!sym(time_col), start_DT, end_DT)) %>%
+    # Pad missing timestamps based on summarize_interval
+    pad(
+      start_val = start_DT,
+      end_val = end_DT,
+      by = time_col,
+      interval = summarize_interval,   #  "1 hour", "1 day", etc.
+      group = c("site")
+    ) %>%
+    # Compute min/max across folds
+    mutate(
+      !!glue("{target_col}_guess_min") := pmin(!!!syms(fold_cols), na.rm = TRUE),
+      !!glue("{target_col}_guess_max") := pmax(!!!syms(fold_cols), na.rm = TRUE),
+      !!glue("{target_col}_guess_ensemble") := pmax(0, !!sym(glue("{target_col}_guess_ensemble")))#,
+     # group = with(rle(!is.na(.data[[glue("{target_col}_guess_ensemble")]])), rep(seq_along(values), lengths))
+    )
+
+  # Return the data with TOC predictions
+  return(final_dataset)
 
 }
 
