@@ -146,7 +146,7 @@ pull_wet_api <- function(target_site, start_datetime, end_datetime = Sys.time())
     # Batch processing with lubridate and data.table specialized functions
     WQ_data[, `:=`(
       DT_round = lubridate::with_tz(lubridate::round_date(DT_round_MT, unit = "15 minutes"), tz = "UTC"),
-      value = data.table::fifelse(value < -9000 | is.nan(value), NA_real_, value)
+      value = data.table::fifelse(value < -90 | is.nan(value), NA_real_, value)
     )]
 
     WQ_data[, DT_join := as.character(DT_round)]
