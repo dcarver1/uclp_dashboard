@@ -115,9 +115,7 @@ wet_data <- map(wet_sites,
                 ~pull_wet_api(
                   target_site = .x,
                   start_datetime = denver_start_DT,
-                  end_datetime = denver_end_DT,
-                  data_type = "all",
-                  time_window = "all"
+                  end_datetime = denver_end_DT
                 ))%>%
   rbindlist()%>%
   filter(value %nin% invalid_wet_values, !is.na(value))%>%
