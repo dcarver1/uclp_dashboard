@@ -125,20 +125,20 @@ apply_toc_model <- function(sensor_data, toc_model_file_path, scaling_params_fil
     final_preds <- if_else(has_na, NA_real_, raw_preds)
 
     # Get predictions as tibble
-    tibble(!!glue("{target_col}_guess_fold{.y}") := final_preds)
+    tibble(!!paste0(target_col, "_guess_fold", .y) := final_preds)
 
   }) %>%
     bind_cols(summarized_data, .)%>%
     # compute ensemble mean
     mutate(
-      !!glue("{target_col}_guess_ensemble") := if_else(
+      !!paste0(target_col, "_guess_ensemble") := if_else(
         if_any(all_of(features), is.na),                # Check if ANY feature is NA
         NA_real_,                                                        # If true, set ensemble to NA
-        round(rowMeans(across(matches(glue("{target_col}_guess_fold")))), 2) # Else, compute mean
+        round(rowMeans(across(matches(paste0(target_col, "_guess_fold")))), 2) # Else, compute mean
       )
     )
   # Columns with fold predictions
-  fold_cols <- grep(glue("{target_col}_guess_fold"), colnames(summarized_data), value = TRUE)
+  fold_cols <- grep(paste0(target_col, "_guess_fold"), colnames(summarized_data), value = TRUE)
 
   start_DT <- min(sensor_data[[time_col]], na.rm = TRUE)
   end_DT <- max(sensor_data[[time_col]], na.rm = TRUE)
@@ -156,10 +156,10 @@ apply_toc_model <- function(sensor_data, toc_model_file_path, scaling_params_fil
     ) %>%
     # Compute min/max across folds
     mutate(
-      !!glue("{target_col}_guess_min") := pmin(!!!syms(fold_cols), na.rm = TRUE),
-      !!glue("{target_col}_guess_max") := pmax(!!!syms(fold_cols), na.rm = TRUE),
-      !!glue("{target_col}_guess_ensemble") := pmax(0, !!sym(glue("{target_col}_guess_ensemble")))#,
-     # group = with(rle(!is.na(.data[[glue("{target_col}_guess_ensemble")]])), rep(seq_along(values), lengths))
+      !!paste0(target_col, "_guess_min") := pmin(!!!syms(fold_cols), na.rm = TRUE),
+      !!paste0(target_col, "_guess_max") := pmax(!!!syms(fold_cols), na.rm = TRUE),
+      !!paste0(target_col, "_guess_ensemble") := pmax(0, !!sym(paste0(target_col, "_guess_ensemble")))#,
+     # group = with(rle(!is.na(.data[[paste0(target_col, "_guess_ensemble")]])), rep(seq_along(values), lengths))
     )
 
   # Return the data with TOC predictions

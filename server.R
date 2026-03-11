@@ -10,6 +10,9 @@ server <- function(input, output, session) {
   #   )
   # )
 
+  # Initialize home module
+  is_sync_done <- home_server("home")
+
   # Reactive values for storing data
   values <- reactiveValues(
     all_data = NULL,
@@ -39,6 +42,7 @@ server <- function(input, output, session) {
 
   #### Pre loading API/Cached Data ####
   observe({
+    req(is_sync_done())
     withProgress(message = "Retrieving CLP WQ Data...", {
 
       # read inputs once at startup

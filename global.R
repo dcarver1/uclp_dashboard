@@ -14,13 +14,10 @@ suppressMessages({
   # Data cleaning and utilities
   library(janitor)
   library(broom)
-  library(here)
-  library(glue)
   # Stats/modeling
   library(stats)
   library(RcppRoll)
   library(trend)
-  library(scales)
   library(xgboost)
   # Spatial packages
   library(sf)
@@ -28,7 +25,6 @@ suppressMessages({
   # Vis
   library(ggpubr)
   library(ggthemes)
-  library(scales)
   library(plotly)
   library(ggpmisc)
   # Web scraping/data retrieval

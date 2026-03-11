@@ -7,6 +7,7 @@ ui <- dashboardPage(
     #### Define Sidebar ####
     dashboardSidebar(
       sidebarMenu(
+        menuItem("Home", tabName = "home", icon = icon("home")),
         menuItem("Live WQ Data", tabName = "sensor_data", icon = icon("chart-line")),
         #Placeholder for future functions
         #menuItem("WQ Forecast", tabName = "forecast", icon = icon("bolt"))
@@ -44,6 +45,9 @@ ui <- dashboardPage(
 ")),
 
       tabItems(
+        #### Home Tab ####
+        home_ui("home"),
+        
         #### Sensor Data Tab ####
         tabItem(tabName = "sensor_data",
                 fluidRow(

@@ -87,7 +87,7 @@ apply_training_scale <- function( new_data, full_dataset = NULL, scaling_params 
     }
 
     scaling_params %>%
-      write_parquet(here(paste0(scaling_param_out_path, ".parquet")))
+      write_parquet(paste0(scaling_param_out_path, ".parquet"))
   }
 
   #apply new scaling to new data
@@ -103,7 +103,7 @@ apply_training_scale <- function( new_data, full_dataset = NULL, scaling_params 
         min_val <- scaling_params[[paste0(col, "_min")]]
         max_val <- scaling_params[[paste0(col, "_max")]]
         #rescale the original data to 0-1 based on training data min/max
-        scales::rescale(.x, to = c(0, 1), from = c(min_val, max_val))
+        (.x - min_val) / (max_val - min_val)
       },
       .names = "{.col}" # overwrite with scaled values (keep same names)
     ))
