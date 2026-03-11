@@ -10,7 +10,7 @@ home_ui <- function(id) {
               title = "System Initialization", 
               status = "primary", 
               solidHeader = TRUE, 
-              width = 8,
+              width = 4,
               
               p("The dashboard pools high-resolution data from multiple watershed APIs. Please initialize the data streams to begin."),
               br(),
@@ -21,13 +21,20 @@ home_ui <- function(id) {
               
               # Where our dynamic checklist will render (wrapped in ns())
               uiOutput(ns("sync_checklist"))
+            ),
+            box(
+              title = "Latest Water Quality Snapshot",
+              status = "primary",
+              solidHeader = TRUE,
+              width = 8,
+              leafletOutput(ns("home_map"), height = "600px") %>% withSpinner()
             )
           )
   )
 }
 
 #### Home Module Server ####
-home_server <- function(id) {
+home_server <- function(id, loaded_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -114,6 +121,94 @@ home_server <- function(id) {
         # Show a success message
         showNotification("All data streams initialized successfully!", type = "message")
       }
+    })
+
+    # Render Home Map with latest snapshots
+    output$home_map <- renderLeaflet({
+      # Initial empty map before data loads
+      if (is.null(loaded_data()) || nrow(loaded_data()) == 0) {
+        # Default view of the watershed
+        m <- leaflet() %>%
+          addTiles() %>%
+          setView(lng = -105.3, lat = 40.6, zoom = 9) %>%
+          addControl("Please click 'Initialize Data Streams' to load site locations and data.", position = "topright")
+        return(m)
+      }
+      
+      # Process the snapshot data
+      data <- loaded_data()
+      
+      # Find the latest reading for each site/parameter
+      latest_readings <- data %>%
+        group_by(site, parameter) %>%
+        filter(DT_round == max(DT_round, na.rm = TRUE)) %>%
+        slice(1) %>%
+        ungroup()
+        
+      # Pivot so we have one row per site with columns for each parameter
+      snapshot_wide <- latest_readings %>%
+        select(site, DT_round_MT, parameter, mean, units) %>%
+        # Combine value and units for display
+        mutate(display_val = paste0(round(mean, 2), " ", units)) %>%
+        select(-mean, -units) %>%
+        pivot_wider(
+          names_from = parameter, 
+          values_from = display_val
+        ) %>%
+        left_join(site_table, by = c("site" = "site_code"))
+
+      # Load spatial coordinates
+      # (Using the same logic as the Site Map tab)
+      locations <- read_csv("data/sonde_location_metadata.csv", show_col_types = FALSE) %>%
+        separate(col = "lat_long", into = c("lat", "lon"), sep = ",", convert = TRUE) %>%
+        mutate(
+          site = tolower(Site),
+          site = ifelse(site %in% c("pman", "pbr"), paste0(site, "_fc"), site)
+        ) %>%
+        select(site, lat, lon, watershed)
+        
+      # Join spatial data with our snapshot data
+      map_data <- locations %>%
+        inner_join(snapshot_wide, by = "site") %>%
+        st_as_sf(coords = c("lon", "lat"), crs = 4326)
+
+      # Build HTML for popups dynamically based on available columns
+      # Exclude non-parameter columns from the stats list
+      exclude_cols <- c("site", "DT_round_MT", "site_name", "color", "lat", "lon", "watershed", "geometry", "Site")
+      param_cols <- setdiff(names(snapshot_wide), exclude_cols)
+
+      map_data$popup_content <- lapply(seq_len(nrow(map_data)), function(i) {
+        row <- map_data[i, ]
+        
+        # Build the HTML popup
+        popup <- paste0(
+          "<b>Site:</b> ", row$site_name, "<br>",
+          "<b>Latest Reading:</b> ", format(row$DT_round_MT, "%Y-%m-%d %H:%M"), "<br><hr>",
+          "<b>Current Conditions:</b><br>"
+        )
+        
+        # Add available parameters
+        for (param in param_cols) {
+          val <- row[[param]]
+          if (!is.na(val) && val != "NA NA") {
+            popup <- paste0(popup, "<i>", param, ":</i> ", val, "<br>")
+          }
+        }
+        
+        return(HTML(popup))
+      })
+
+      # Render the populated map
+      leaflet(map_data) %>%
+        addTiles() %>%
+        addCircleMarkers(
+          radius = 8,
+          color = ~color,
+          fillOpacity = 0.8,
+          popup = ~popup_content,
+          label = ~site_name,
+          labelOptions = labelOptions(noHide = FALSE, textsize = "14px")
+        )
     })
     
     # Return a reactive value indicating if the sync is completely finished

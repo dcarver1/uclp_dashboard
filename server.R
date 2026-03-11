@@ -10,8 +10,11 @@ server <- function(input, output, session) {
   #   )
   # )
 
+  #setup loaded data
+  loaded_data <- reactiveVal(NULL)
+
   # Initialize home module
-  is_sync_done <- home_server("home")
+  is_sync_done <- home_server("home", loaded_data)
 
   # Reactive values for storing data
   values <- reactiveValues(
@@ -34,9 +37,6 @@ server <- function(input, output, session) {
                   inline = TRUE)
     )
   })
-
-  #setup loaded data
-  loaded_data <- reactiveVal(NULL)
 
 #TODO: This is done at load up, should it be moved to global?
 

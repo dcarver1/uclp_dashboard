@@ -5,6 +5,8 @@
 # Remove the custom package_loader function and install.packages() calls
 
 # Simply load required packages - shinyapps.io will automatically detect and install them
+## commiting out libraries that are not used 
+## remove here, scales, and glue as there were not called oftem and easily replaced. 
 suppressMessages({
   #library(furrr)
   library(ross.wq.tools)
@@ -12,34 +14,34 @@ suppressMessages({
   library(zoo)
   library(padr)
   # Data cleaning and utilities
-  library(janitor)
-  library(broom)
+  # library(janitor)
+  # library(broom)
   # Stats/modeling
   library(stats)
-  library(RcppRoll)
-  library(trend)
+  # library(RcppRoll)
+  # library(trend)
   library(xgboost)
   # Spatial packages
   library(sf)
   library(leaflet)
   # Vis
-  library(ggpubr)
-  library(ggthemes)
+  # library(ggpubr)
+  # library(ggthemes)
   library(plotly)
-  library(ggpmisc)
+  # library(ggpmisc)
   # Web scraping/data retrieval
   library(rvest)
-  library(httr)
+  # library(httr)
   library(httr2)
   library(cdssr)
   library(yaml)
   # Development tools
-  library(devtools)
+  library(devtools) # this might be needed as ross.wq and cddsr are not on cran 
   # Shiny
   library(shiny)
-  library(shinymanager)
+  # library(shinymanager) # maybe? 
   library(shinycssloaders)
-  library(shinyTime)
+  # library(shinyTime)
   library(bslib)
   library(shinyWidgets)
   library(shinydashboard)
