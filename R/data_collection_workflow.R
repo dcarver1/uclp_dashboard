@@ -107,6 +107,7 @@ if (mm_DT_tz == "UTC") {
 ## Radio Telemetry Data ----
 # This comes through the WET API service.
 # Pulled in by the function `pull_wet_api()`.
+source(file = here("R", "pull_wet_api.R"))
 invalid_wet_values <- c(-9999, 638.30, -99.99)
 source(file = here("R", "pull_wet_api.R"))
 
