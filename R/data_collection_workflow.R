@@ -172,20 +172,7 @@ walk(sites,
      }
 )
 
-hv_data <- list.files(staging_directory, full.names = TRUE, pattern = ".parquet") %>%
-  map_dfr(function(file_path){
-    site_df <- read_parquet(file_path, as_data_frame = TRUE)
-    return(site_df)
-  }) %>%
-  select(-id) %>%
-  mutate(units = as.character(units)) %>%
-  filter(!grepl("vulink", name, ignore.case = TRUE)) %>%
-  mutate(
-    DT = timestamp,
-    DT_round = round_date(DT, "15 minutes"),
-    DT_join = as.character(DT_round),
-    site = tolower(site)) %>%
-  select(-name) %>%
+hv_data <- hv_data <- ross.wq.tools::munge_api_data(api_dir = staging_directory) %>%
   distinct(.keep_all = TRUE)%>%
   split(f = list(.$site, .$parameter), sep = "-") %>%
   keep(~nrow(.) > 0)
@@ -238,14 +225,11 @@ tidy_data <- all_data_with_context %>%
 
 # Read in threshold and sensor notes ----
 sensor_thresholds_file <- "data/qaqc/sensor_spec_thresholds.yml"
-seasonal_thresholds_file <- "data/qaqc/updated_seasonal_thresholds_2025_sjs.csv"
-fc_seasonal_thresholds_file <- "data/qaqc/fc_seasonal_thresholds_2025_sjs.csv"
+seasonal_thresholds_file <- "data/qaqc/seasonal_thresholds20260304-T175010Z.parquet"
 fc_field_notes_file <- "data/qaqc/fc_field_notes_formatted.rds"
 
 sensor_thresholds <- read_yaml(sensor_thresholds_file)
-fc_seasonal_thresholds <- read_csv(fc_seasonal_thresholds_file, show_col_types = FALSE)
-season_thresholds <- read_csv(seasonal_thresholds_file, show_col_types = FALSE)%>%
-  bind_rows(fc_seasonal_thresholds)
+season_thresholds <- read_parquet(seasonal_thresholds_file)
 
 # Pulling in the data from mWater (where we record our field notes)
 message(paste("Collation Step:", "getting mWater creds"))
