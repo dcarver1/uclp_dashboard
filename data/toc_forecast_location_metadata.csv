@@ -1,0 +1,11 @@
+site_code,site_name,Long,Lat,distance_upstream_km,model_version
+jwc,JWC-Joe Wright @ Aspen Glen Campground,-105.81937,40.61988,80.916,Distributed
+pjw,Poudre Above Joe Wright,-105.807264,40.634114,80.916,Distributed
+pbr,Poudre Below Rustic,-105.544028,40.700221,47.262,Distributed
+sfm,Poudre South Fork,-105.525583,40.61825,53.476,Distributed
+psf,Poudre Below S. Fork,-105.448748,40.694953,33.951,Distributed
+chd,Chambers Outflow,-105.8427286,40.60233229,86.049,Distributed
+pbd,Poudre at Bellvue Diversion,-105.22419,40.664519,0,Distributed
+pfal,Poudre below Poudre Falls,-105.810831,40.651785,77.122,Distributed
+pman,Poudre at Manner's Bridge,-105.268818,40.69664,10.851,Distributed
+prw,PRW INTAKE [311],-105.247566,40.70098,7.5,FC Intake
