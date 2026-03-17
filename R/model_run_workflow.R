@@ -169,9 +169,6 @@ intake_forecast <- intake_input %>%
     site_code          = intake_sites$site_code,
     site_name          = intake_sites$site_name,
     model_version      = "FC Intake",
-    dist_mean_pred_toc = NA_real_,
-    dist_min_pred_toc  = NA_real_,
-    dist_max_pred_toc  = NA_real_
   )
 
 # ==============================================================================

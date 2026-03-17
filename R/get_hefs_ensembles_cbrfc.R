@@ -75,16 +75,6 @@ get_hefs_ensembles_cbrfc <- function(ID, date = NULL) {
             dplyr::rename(!!paste0("ens_", .y) := V2)) %>%
     purrr::reduce(full_join, by = "date_time") %>%
     dplyr::mutate(date_time = as.POSIXct(date_time / 1000, origin = "1970-01-01", tz = "UTC")) %>%
-    dplyr::rowwise() %>%
-    # Calculate ensemble stats
-    dplyr::mutate(
-      min_ens = min(c_across(starts_with("ens_")), na.rm = TRUE),
-      q_25 = quantile(c_across(starts_with("ens_")), probs = 0.25, na.rm = TRUE) %>% as.numeric(),
-      q_50 = quantile(c_across(starts_with("ens_")), probs = 0.5, na.rm = TRUE) %>% as.numeric(),
-      q_75 = quantile(c_across(starts_with("ens_")), probs = 0.75, na.rm = TRUE) %>% as.numeric(),
-      max_ens = max(c_across(starts_with("ens_")), na.rm = TRUE)
-    ) %>%
-    dplyr::ungroup() %>%
     dplyr::mutate(forecast_date = lubridate::date(forecast_full$ensinfo$fcstdate))
 
   # Ensure we have quantile names before proceeding with unnesting/renaming
