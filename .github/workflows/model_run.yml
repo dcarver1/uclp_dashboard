@@ -1,8 +1,7 @@
 name: Daily TOC Forecast Model Run (Distributed GAM + Intake GAM)
 on:
   schedule:
-    - cron: "0 14 * * *"  # 8 AM MDT — early/opportunistic HEFS check
-    - cron: "0 21 * * *"  # 3 PM MDT — primary pull, post-CBRFC run (~2 PM MDT)
+    - cron: "0 21 * * *"  # 3 PM MDT — HEFS releases ~18Z, SNOTEL ready by ~07Z; single run avoids data source timing mismatch
   workflow_dispatch:  # Allows manual triggering for testing
 jobs:
   model-run:
@@ -39,7 +38,7 @@ jobs:
         run: |
           git config --global user.email 'actions@github.com'
           git config --global user.name 'GitHub Actions'
-          git add -f data/toc_forecast_backup.parquet
+          git add -f data/toc_forecast_distributed_backup.parquet data/toc_forecast_intake_backup.parquet
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else

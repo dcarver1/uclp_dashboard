@@ -1,17 +1,17 @@
 # model_run_workflow.R
 #
 # Daily TOC forecast workflow for the Upper Cache la Poudre watershed.
-# Called by .github/workflows/model_run.yml (runs at 8 AM and 3 PM MDT).
+# Called by .github/workflows/model_run.yml (runs at 3 PM MDT / 21Z).
 #
 # Migrated and adapted from upper_clp_dss:
 #   - modeling/external_forecasts/HEFS_canyon_mouth_23-25.Rmd
 #   - modeling/toc/toc_forecast/distributed/apply_gam_doy_forecasted_Q.Rmd
 #   - modeling/toc/toc_forecast/intake/apply_intake_toc_model.Rmd
 #
-# Output: data/toc_forecast_backup.parquet
-#   One row per forecast_date x site_code x date_24h x ensemble_member.
-#   Distributed model predictions and intake model predictions are stored
-#   as separate columns; rows that do not apply to a given model have NAs.
+# Output (append-only, one file per model type):
+#   data/toc_forecast_distributed_backup.parquet — distributed GAM (all mainstem sites)
+#   data/toc_forecast_intake_backup.parquet      — intake SWE GAM (FC treatment plant)
+#   Each run appends new rows; today's rows are replaced if the script runs twice.
 
 library(tidyverse)
 library(arrow)
@@ -130,11 +130,11 @@ dist_forecast <- dist_input %>%
     dist_mean_pred_toc = mean(pred_toc),
     dist_min_pred_toc  = min(pred_toc),
     dist_max_pred_toc  = max(pred_toc),
+    dist_q25_pred_toc  = quantile(pred_toc, 0.25),
+    dist_q75_pred_toc  = quantile(pred_toc, 0.75),
     .by = c(date, site_code, site_name, date_24h)
   ) %>%
-  mutate(model_version         = "Distributed",
-         intake_q_doy_int_pred = NA_real_,
-         intake_q_swe_pred     = NA_real_)
+  mutate(model_version = "Distributed")
 
 # ==============================================================================
 # 5. INTAKE GAM — Fort Collins treatment plant intake (PRW)
@@ -142,8 +142,7 @@ dist_forecast <- dist_input %>%
 
 message("Applying intake TOC GAM...")
 
-intake_q_doy_int <- read_rds("data/models/TOC_intake_GAM_Q_doy_inter_v2026-02-18.rds")
-intake_q_swe     <- read_rds("data/models/TOC_intake_GAM_Q_swe-melt14_v2026-02-18.rds")
+intake_q_swe <- read_rds("data/models/TOC_intake_GAM_Q_swe-melt14_v2026-02-18.rds")
 
 # Join HEFS forecasts with SNOTEL on the forecast issue date
 intake_input <- forecasted_q_vert %>%
@@ -156,46 +155,64 @@ intake_input <- forecasted_q_vert %>%
 
 intake_forecast <- intake_input %>%
   mutate(
-    intake_q_doy_int_pred = predict(intake_q_doy_int, intake_input),
-    intake_q_swe_pred     = predict(intake_q_swe,     intake_input)
+    intake_q_swe_pred = predict(intake_q_swe, intake_input)
   ) %>%
   # Summarize across HEFS ensemble members, matching distributed GAM convention
   summarize(
-    intake_q_doy_int_pred = mean(intake_q_doy_int_pred),
     intake_q_swe_pred     = mean(intake_q_swe_pred),
+    intake_q_swe_pred_q25 = quantile(intake_q_swe_pred, 0.25),
+    intake_q_swe_pred_q75 = quantile(intake_q_swe_pred, 0.75),
     .by = c(date, date_24h)
   ) %>%
   mutate(
     site_code          = intake_sites$site_code,
     site_name          = intake_sites$site_name,
-    model_version      = "FC Intake",
+    model_version      = "FC Intake"
   )
 
 # ==============================================================================
-# 6. COMBINE AND SAVE (append, replacing today's rows if already present)
+# 6. SAVE (append, replacing today's rows if already present)
 # ==============================================================================
 
-message("Writing toc_forecast_backup.parquet...")
+# --- Distributed ---
+message("Writing toc_forecast_distributed_backup.parquet...")
 
-toc_forecast_new <- bind_rows(dist_forecast, intake_forecast) %>%
+dist_forecast_new <- dist_forecast %>%
   select(date, site_code, site_name, model_version, date_24h,
          dist_mean_pred_toc, dist_min_pred_toc, dist_max_pred_toc,
-         intake_q_doy_int_pred, intake_q_swe_pred)
+         dist_q25_pred_toc, dist_q75_pred_toc)
 
-parquet_path <- "data/toc_forecast_backup.parquet"
+dist_parquet_path <- "data/toc_forecast_distributed_backup.parquet"
 
-if (file.exists(parquet_path)) {
-  # Remove any existing rows for today (so 3 PM run supersedes 8 AM run),
-  # then append the fresh forecast
-  toc_forecast <- read_parquet(parquet_path) %>%
+if (file.exists(dist_parquet_path)) {
+  dist_toc_forecast <- read_parquet(dist_parquet_path) %>%
     filter(date != Sys.Date()) %>%
-    bind_rows(toc_forecast_new)
+    bind_rows(dist_forecast_new)
 } else {
-  toc_forecast <- toc_forecast_new
+  dist_toc_forecast <- dist_forecast_new
 }
 
-write_parquet(toc_forecast, parquet_path)
+write_parquet(dist_toc_forecast, dist_parquet_path)
 
-message(sprintf("Done. %d new forecast rows written; %d total rows in archive.",
-                nrow(toc_forecast_new),
-                nrow(toc_forecast)))
+# --- Intake ---
+message("Writing toc_forecast_intake_backup.parquet...")
+
+intake_forecast_new <- intake_forecast %>%
+  select(date, site_code, site_name, model_version, date_24h,
+         intake_q_swe_pred, intake_q_swe_pred_q25, intake_q_swe_pred_q75)
+
+intake_parquet_path <- "data/toc_forecast_intake_backup.parquet"
+
+if (file.exists(intake_parquet_path)) {
+  intake_toc_forecast <- read_parquet(intake_parquet_path) %>%
+    filter(date != Sys.Date()) %>%
+    bind_rows(intake_forecast_new)
+} else {
+  intake_toc_forecast <- intake_forecast_new
+}
+
+write_parquet(intake_toc_forecast, intake_parquet_path)
+
+message(sprintf("Done. %d distributed + %d intake forecast rows written.",
+                nrow(dist_forecast_new),
+                nrow(intake_forecast_new)))
