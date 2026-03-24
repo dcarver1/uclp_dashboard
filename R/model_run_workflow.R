@@ -90,8 +90,10 @@ swe_pca <- read_rds("data/models/SWE_PCA_v2026-02-18.rds")
 
 snotel <- snotel_matrix %>%
   mutate(swe_pca = predict(swe_pca, .)[, "PC1"]) %>%
-  select(date, swe_pca) %>%
-  # Compute 14-day melt rate
+  select(date, swe_pca)
+
+# Compute 14-day melt rate (requires snotel to exist first for the self-join)
+snotel <- snotel %>%
   arrange(date) %>%
   mutate(date_m14 = date - lubridate::days(14)) %>%
   left_join(snotel %>% select(date, swe_pca) %>%
