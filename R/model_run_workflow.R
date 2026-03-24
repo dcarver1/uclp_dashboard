@@ -161,6 +161,8 @@ intake_forecast <- intake_input %>%
   ) %>%
   # Summarize across HEFS ensemble members, matching distributed GAM convention
   summarize(
+    intake_q_swe_pred_min = min(intake_q_swe_pred, na.rm = T),
+    intake_q_swe_pred_max = max(intake_q_swe_pred, na.rm = T),
     intake_q_swe_pred_q25 = quantile(intake_q_swe_pred, 0.25),
     intake_q_swe_pred_q75 = quantile(intake_q_swe_pred, 0.75),
     intake_q_swe_pred     = mean(intake_q_swe_pred),
@@ -201,7 +203,9 @@ message("Writing toc_forecast_intake_backup.parquet...")
 
 intake_forecast_new <- intake_forecast %>%
   select(date, site_code, site_name, model_version, date_24h,
-         intake_q_swe_pred, intake_q_swe_pred_q25, intake_q_swe_pred_q75)
+         intake_q_swe_pred,
+         intake_q_swe_pred_min, intake_q_swe_pred_max,
+         intake_q_swe_pred_q25, intake_q_swe_pred_q75)
 
 intake_parquet_path <- "data/toc_forecast_intake_backup.parquet"
 
