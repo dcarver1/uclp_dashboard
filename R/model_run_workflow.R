@@ -151,7 +151,7 @@ intake_input <- forecasted_q_vert %>%
   left_join(snotel, by = "date") %>%
   filter(!is.na(swe_pca)) %>%
   mutate(
-    doy                = lubridate::yday(date_24h),
+    doy                  = lubridate::yday(date_24h),
     distance_upstream_km = intake_sites$distance_upstream_km
   )
 
@@ -161,9 +161,9 @@ intake_forecast <- intake_input %>%
   ) %>%
   # Summarize across HEFS ensemble members, matching distributed GAM convention
   summarize(
-    intake_q_swe_pred     = mean(intake_q_swe_pred),
     intake_q_swe_pred_q25 = quantile(intake_q_swe_pred, 0.25),
     intake_q_swe_pred_q75 = quantile(intake_q_swe_pred, 0.75),
+    intake_q_swe_pred     = mean(intake_q_swe_pred),
     .by = c(date, date_24h)
   ) %>%
   mutate(
