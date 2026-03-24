@@ -1,7 +1,7 @@
 # model_run_workflow.R
 #
 # Daily TOC forecast workflow for the Upper Cache la Poudre watershed.
-# Called by .github/workflows/model_run.yml (runs at 3 PM MDT / 21Z).
+# Called by .github/workflows/model_run.yml (runs at 10Z: 3 AM MST / 4 AM MDT).
 #
 # Migrated and adapted from upper_clp_dss:
 #   - modeling/external_forecasts/HEFS_canyon_mouth_23-25.Rmd

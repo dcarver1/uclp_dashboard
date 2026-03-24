@@ -1,7 +1,7 @@
 name: Daily TOC Forecast Model Run (Distributed GAM + Intake GAM)
 on:
   schedule:
-    - cron: "0 21 * * *"  # 3 PM MDT — HEFS releases ~18Z, SNOTEL ready by ~07Z; single run avoids data source timing mismatch
+    - cron: "0 10 * * *"  # UTC does not adjust for daylight saving: 3 AM MST (Nov-Mar), 4 AM MDT (Mar-Nov) — HEFS day x-1 (12Z cycle) available since ~13:40Z, SNOTEL day x-1 summary available by ~09Z; single run
   workflow_dispatch:  # Allows manual triggering for testing
 jobs:
   model-run:

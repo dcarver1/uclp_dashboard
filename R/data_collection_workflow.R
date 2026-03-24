@@ -225,7 +225,7 @@ tidy_data <- all_data_with_context %>%
 
 # Read in threshold and sensor notes ----
 sensor_thresholds_file <- "data/qaqc/sensor_spec_thresholds.yml"
-seasonal_thresholds_file <- "data/qaqc/seasonal_thresholds20260304-T175010Z.parquet"
+seasonal_thresholds_file <- "data/qaqc/uclp_dashboard_seasonal_thresholds20260323-T175010Z.parquet"
 fc_field_notes_file <- "data/qaqc/fc_field_notes_formatted.rds"
 
 sensor_thresholds <- read_yaml(sensor_thresholds_file)
