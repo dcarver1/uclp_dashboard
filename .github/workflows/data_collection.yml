@@ -2,7 +2,6 @@ name: Hourly Data Collection From APIs (HV, WET, Contrail)
 on:
   schedule:
     - cron: "1 * * * *"  # Every hour at minute 1 (prevents hv api call issues)
-    # - cron: "0 */2 * * *"  # Every 2 hours (alternative)
   workflow_dispatch:  # Allows manual triggering for testing
 jobs:
   data-pipeline:
