@@ -3,6 +3,9 @@ on:
   schedule:
     - cron: "0 10 * * *"  # UTC does not adjust for daylight saving: 3 AM MST (Nov-Mar), 4 AM MDT (Mar-Nov) — HEFS day x-1 (12Z cycle) available since ~13:40Z, SNOTEL day x-1 summary available by ~09Z; single run
   workflow_dispatch:  # Allows manual triggering for testing
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   model-run:
     runs-on: ubuntu-latest
