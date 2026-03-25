@@ -41,7 +41,7 @@ intake_sites <- location_meta %>%
 
 message("Pulling HEFS forecast for FTDC2 (Canyon Mouth)...")
 
-hefs_raw <- get_hefs_ensembles_cbrfc(ID = "FTDC2", date = Sys.Date())
+hefs_raw <- get_hefs_ensembles_cbrfc(ID = "FTDC2", date = Sys.Date() - 1)
 
 if (is.null(hefs_raw) || nrow(hefs_raw) == 0) {
   stop("HEFS pull returned NULL or no rows. Aborting model run.")
