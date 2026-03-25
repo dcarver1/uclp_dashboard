@@ -35,7 +35,7 @@ jobs:
       # === MODEL RUN PHASE ===
       - name: Run Models
         working-directory: ./
-        run: Rscript R/model_run_workflow.R
+        run: Rscript gha_scripts/model_run_workflow.R
       # === SAVE PHASE ===
       - name: Save - Commit and push results
         run: |
