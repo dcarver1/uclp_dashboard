@@ -103,4 +103,5 @@ toc_model_bounds <- water_chem%>%
   summarise(TOC_lower  = min(TOC, na.rm = T),
             TOC_upper = max(TOC, na.rm = T))
 
+toc_forecast_sites <- read_csv("data/toc_forecast_location_metadata.csv", show_col_types = F)%>%filter(model_version == "Distributed")
 
