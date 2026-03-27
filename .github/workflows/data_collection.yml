@@ -53,7 +53,7 @@ jobs:
           HYDROVU_CLIENT_ID: ${{ secrets.HYDROVU_CLIENT_ID }}
           HYDROVU_CLIENT_SECRET: ${{ secrets.HYDROVU_CLIENT_SECRET }}
           MWATER_SECRET: ${{secrets.MWATER_SECRET}}
-        run: Rscript R/data_collection_workflow.R
+        run: Rscript gha_scripts/data_collection_workflow.R
       # === SAVE PHASE ===
       - name: Save - Commit and push results
         run: |

@@ -20,7 +20,7 @@ library(snotelr)
 library(httr)
 library(jsonlite)
 
-source("R/get_hefs_ensembles_cbrfc.R")
+source("gha_scripts/get_hefs_ensembles_cbrfc.R")
 
 # ==============================================================================
 # 1. LOCATION METADATA
