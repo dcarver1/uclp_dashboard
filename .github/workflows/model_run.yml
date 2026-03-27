@@ -5,6 +5,7 @@ on:
   workflow_dispatch:  # Allows manual triggering for testing
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CURL_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt  
 
 jobs:
   model-run:
