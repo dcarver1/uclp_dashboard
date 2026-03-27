@@ -33,6 +33,12 @@ jobs:
             any::arrow
             any::mgcv
             any::snotelr
+      - name: Setup - Install Ubuntu system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudunits2-dev libgdal-dev libgeos-dev libproj-dev \
+            ca-certificates curl
+          sudo update-ca-certificates
       # === MODEL RUN PHASE ===
       - name: Run Models
         working-directory: ./
