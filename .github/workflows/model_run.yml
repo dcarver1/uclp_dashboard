@@ -1,7 +1,8 @@
 name: Daily TOC Forecast Model Run (Distributed GAM + Intake GAM)
 on:
   schedule:
-    - cron: "0 10 * * *"  # UTC does not adjust for daylight saving: 3 AM MST (Nov-Mar), 4 AM MDT (Mar-Nov) — HEFS day x-1 (12Z cycle) available since ~13:40Z, SNOTEL day x-1 summary available by ~09Z; single run
+    - cron: "0 10 * * *"  # Primary run: 3 AM MST / 4 AM MDT
+    - cron: "0 11 * * *"  # Retry run: 4 AM MST / 5 AM MDT — no-op if primary succeeded
   workflow_dispatch:  # Allows manual triggering for testing
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
