@@ -27,8 +27,8 @@ dist_parquet_path   <- "data/toc_forecast_distributed_backup.parquet"
 intake_parquet_path <- "data/toc_forecast_intake_backup.parquet"
 
 if (file.exists(dist_parquet_path) && file.exists(intake_parquet_path)) {
-  dist_today   <- read_parquet(dist_parquet_path)   %>% filter(date == Sys.Date())
-  intake_today <- read_parquet(intake_parquet_path) %>% filter(date == Sys.Date())
+  dist_today   <- read_parquet(dist_parquet_path)   %>% filter(date == Sys.Date() - lubridate::days(1))
+  intake_today <- read_parquet(intake_parquet_path) %>% filter(date == Sys.Date() - lubridate::days(1))
   if (nrow(dist_today) > 0 && nrow(intake_today) > 0) {
     message("Today's forecasts already exist — skipping model run.")
     quit(save = "no", status = 0)
