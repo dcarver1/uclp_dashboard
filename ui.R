@@ -1,8 +1,8 @@
 #UI
 
 #### Start UI ####
-ui <- dashboardPage(
-  #secure_app( #wrap in secure_app for authentication with shiny_manager. Undo hash to enable, see `setup` folder for credentials and contact Sam Struthers for usernames/passwords
+ui <- secure_app( #wrap in secure_app for authentication with shiny_manager. Undo hash to enable, see `setup` folder for credentials and contact Sam Struthers for usernames/passwords
+  dashboardPage(
     dashboardHeader(title = "Water Quality Monitoring Dashboard"),
     #### Define Sidebar ####
     dashboardSidebar(
@@ -12,12 +12,12 @@ ui <- dashboardPage(
         #Placeholder for future functions
         #menuItem("WQ Forecast", tabName = "forecast", icon = icon("bolt"))
         menuItem("CLP Basin Conditions", tabName = "flow_data", icon = icon("droplet")),
+        #TODO: Create these tabs and migrate functions as necessary
+        menuItem("TOC Forecasts", tabName = "toc_forecasts", icon = icon("arrow-up-right-dots")),
         menuItem("Site Map", tabName = "map", icon = icon("map"))
-#TODO: Create these tabs and migrate functions as necessary
         #Placeholder for future functions
-        #menuItem("Real-Time TOC", tabName = "toc_realtime", icon = icon("arrow-up-right-dots")),
-        #menuItem("Water Quality Forecasts", tabName = "forecasts", icon = icon("bolt)),
-        #menuItem("Longitudinal Water Quality", tabName = "long_wq", icon = icon("water")),
+        #menuItem("Real-Time TOC", tabName = "toc_realtime", icon = icon("bolt")),
+        #menuItem("Longitudinal Water Quality", tabName = "long_wq", icon = icon("water"))
       )
     ),
     #### Define Body Styling and start tabs ####
@@ -57,9 +57,9 @@ ui <- dashboardPage(
                       column(4,
                              dateRangeInput("date_range",
                                             label = "Select Date Range:",
-                                            start = ymd("2025-11-10") - days(7), # replace with Sys.Date() - days(7) in production
-                                            end = ymd("2025-11-10"), # replace with Sys.Date() in production
-                                            max = ymd("2025-11-10") # replace with Sys.Date() in production
+                                            start = Sys.Date() - days(7),
+                                            end = Sys.Date(),
+                                            max = Sys.Date()
                              ),
                              pickerInput("sites_select",
                                          label = "Select Sites:",
@@ -106,6 +106,7 @@ ui <- dashboardPage(
                   )
                 ),
 
+
                 fluidRow(
                   box(
                     title = "Time Series Plots", status = "primary", solidHeader = TRUE, width = 12,collapsible = TRUE,
@@ -144,6 +145,45 @@ ui <- dashboardPage(
                 )
 
         ),
+        #### TOC Forecast Page ####
+        tabItem(tabName = "toc_forecasts",
+                fluidRow(
+                  box(
+                    title = " Fort Collins Intake Total Organic Carbon (TOC) Forecast", status = "primary", solidHeader = TRUE, width = 12,
+                    #Add a buffer
+                    tags$p(
+                      "These are preliminary probabilistic forecasts for TOC at the Fort Collins CLP Intake. The median value (black line) indicates the likely TOC concentration realtive to forecasted flow while min/max are less likely but possible. These models incorporate forecasted basin flow (cfs) from the NOAA HEFS forecast, basin snow melt conditions from the NRCS SNOTEL network, and seasonal forcing from day of year. Forecasts are generated daily at 3 AM MT.",
+                      style = "margin-top: 15px; font-weight: normal; font-style: italic;"
+                    ),
+                    plotlyOutput("intake_toc_forecast_plot") %>% withSpinner(),
+
+                    fluidRow(
+                      box(
+                        title = "Distributed TOC Forecasts", status = "primary", solidHeader = TRUE, width = 12,collapsible = TRUE,
+                        pickerInput("toc_forecast_sites", "Select Sites for Distributed Forecasts:",
+                                    choices = unique(toc_forecast_sites$site_name),
+                                    selected = c("Poudre at Bellvue Diversion", "Poudre Below Rustic", "Poudre at Manner's Bridge"),
+                                    multiple = TRUE,
+                                    options = pickerOptions(
+                                      actionsBox = TRUE,
+                                      selectAllText = "Select All",
+                                      deselectAllText = "Deselect All"
+                                    )
+                        ),
+
+                        # Add descriptive text below the title
+                        tags$p(
+                          "These are preliminary probabilistic forecasts for TOC at specific sites across the CLP Basin. The median value (black line) indicates the likely TOC concentration realtive to forecasted flow while min/max are less likely but possible. These models incorporate forecasted basin flow (cfs) from the NOAA HEFS forecast, seasonal forcing from day of year, and the site's location in the basin. Forecasts are generated daily 3 AM MT. NOTE: This forecast does NOT incorporate snowmelt from SNOTEL and will likely have differences from the Intake model above.",
+                          style = "margin-bottom: 15px; font-weight: normal; font-style: italic;"
+                        ),
+
+                        uiOutput("dist_toc_forecast_plots") %>% withSpinner()
+                      )
+                    )
+                  )
+                )
+        ),
+
         #### WQ Site Map Tab ####
         tabItem(tabName = "map",
                 fluidRow(
@@ -182,5 +222,5 @@ ui <- dashboardPage(
       )
     )
   )
-# ) #UNDO HASH TO ENABLE SHINY MANAGER AUTHENTICATION, SEE `setup` folder for credentials and contact Sam Struthers for usernames/passwords
+) #UNDO HASH TO ENABLE SHINY MANAGER AUTHENTICATION, SEE `setup` folder for credentials and contact Sam Struthers for usernames/passwords
 #### End of UI ####

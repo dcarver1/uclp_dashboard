@@ -11,3 +11,4 @@ creds/CDWRCreds.yml
 setup/
 .Renviron
 rsconnect
+.claudeignore
