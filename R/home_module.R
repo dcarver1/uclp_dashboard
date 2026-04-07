@@ -43,18 +43,24 @@ home_server <- function(id, loaded_data) {
     snapshot_data <- reactiveVal(NULL)
     
     observe({
-      # Load the cached data as our initial snapshot
-      # In a production environment, this might be a pre-filtered 'latest_only.parquet'
-      github_link <- "data/data_backup.parquet"
-      if (file.exists(github_link)) {
+      # Load the cached data as our initial snapshot from GitHub
+      github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/data_backup.parquet"
+      
+      # Using a tryCatch block to handle potential network issues during initial load
+      tryCatch({
         df <- arrow::read_parquet(github_link, as_data_frame = TRUE)
+        
         # Filter for just the latest snapshot to keep the map responsive
         latest_snapshot <- df %>%
           group_by(site, parameter) %>%
           filter(DT_round == max(DT_round, na.rm = TRUE)) %>%
           ungroup()
+        
         snapshot_data(latest_snapshot)
-      }
+      }, error = function(e) {
+        showNotification("Failed to load initial map snapshot. Please check your internet connection.", type = "error")
+        message("Snapshot load error: ", e$message)
+      })
     })
     
     # 1. Track the current step (0 means hasn't started)
@@ -162,7 +168,7 @@ home_server <- function(id, loaded_data) {
       }
       
       # Define the parameter you want to drive the map colors
-      target_param <- "Temperature" 
+      target_param <- "FDOM Fluorescence" 
       
       # Find the latest reading for each site/parameter
       latest_readings <- data_to_use %>%
@@ -171,6 +177,10 @@ home_server <- function(id, loaded_data) {
         filter(DT_round == max(DT_round, na.rm = TRUE)) %>%
         slice(1) %>%
         ungroup()
+
+      # Calculate the overall latest timestamp in the snapshot for the display
+      snapshot_timestamp <- max(latest_readings$DT_round_MT, na.rm = TRUE)
+      formatted_timestamp <- format(snapshot_timestamp, "%B %d, %Y %I:%M %p %Z")
       
       # Pivot so we have one row per site with text strings for the popups
       snapshot_wide <- latest_readings %>%
@@ -226,12 +236,18 @@ home_server <- function(id, loaded_data) {
       pal <- colorNumeric(palette = "viridis", domain = map_data$numeric_val, na.color = "#a9a9a9")
       bbox <- st_bbox(map_data)
       pad <- 0.15
-      
+      # Render the populated map with locked bounds
       leaflet(map_data, options = leafletOptions(minZoom = 8)) %>%
         addTiles() %>%
         setMaxBounds(
           lng1 = bbox[["xmin"]] - pad, lat1 = bbox[["ymin"]] - pad, 
           lng2 = bbox[["xmax"]] + pad, lat2 = bbox[["ymax"]] + pad
+        ) %>%
+        # Clear indication of snapshot time
+        addControl(
+          html = paste0("<div style='background: rgba(255,255,255,0.8); padding: 10px; border-radius: 5px; border: 2px solid #333;'>",
+                        "<b>Map Data Snapshot:</b><br>", formatted_timestamp, "</div>"),
+          position = "topright"
         ) %>%
         addCircleMarkers(
           radius = 10, color = "#333333", weight = 1.5,
