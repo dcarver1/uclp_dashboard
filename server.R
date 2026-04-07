@@ -42,23 +42,30 @@ server <- function(input, output, session) {
   #### Pre loading API/Cached Data ####
   observe({
     req(is_sync_done())
-    withProgress(message = "Retrieving CLP WQ Data...", {
-
+    # "message" is the bold title, "detail" is the printed talking point
+    withProgress(message = "Dashboard Initialization", detail = "Starting up...", value = 0, {
+      
+      incProgress(0.1, detail = "Validating date ranges and site selections...")
+      Sys.sleep(1)
+      
       # read inputs once at startup
-      date_range <- isolate(input$date_range) # This is where the user picks the start DT
+      date_range <- isolate(input$date_range) 
       sites_select <- isolate(input$sites_select)
       parameters_select <- isolate(input$parameters_select)
-
+      
       req(date_range, sites_select, parameters_select)
-
+      
       sites_sel <- filter(site_table, site_name %in% sites_select) %>%
         pull(site_code)
-
-      #Read in cached data which has been passed through autoQAQC
+      incProgress(0.3, detail = "Locating cached data files...")
       github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/data_backup.parquet"
       #github_link <- "data/data_backup.parquet" #remove on live version and use ^ github link instead ^, this can be used for local testing
+      Sys.sleep(1)
+      
+      incProgress(0.5, detail = "Importing historical parquet data...")
       cached_data <- arrow::read_parquet(github_link, as_data_frame = TRUE)
-
+      Sys.sleep(1)
+      
       #### ---- Data pull between QAQC and Live ---- ####
       # #Calculate max datetimes in cached dataset by site
       max_dts <- cached_data%>%
@@ -280,16 +287,17 @@ server <- function(input, output, session) {
       #### ---- End of data pull between QAQC and Live ---- ####
 
 
+      incProgress(0.8, detail = "Structuring and deduplicating dataset...")
       dashboard_data <- cached_data %>%
-        bind_rows(combined_data) %>% #unhash for live version (this is live data)
         arrange(site, parameter, DT_round) %>%
         distinct(site, parameter, DT_round, .keep_all = TRUE) %>%
         ungroup()
-
-
+      
+      incProgress(0.9, detail = "Rendering final UI components...")
+      Sys.sleep(0.5) # A tiny pause so the user can actually read the final step
+      
       # Set the loaded data
-      incProgress(1, detail = "Data Loaded")
-
+      incProgress(1, detail = "Data successfully loaded!")
       loaded_data(dashboard_data)
     })
   })

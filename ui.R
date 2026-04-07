@@ -30,19 +30,20 @@ ui <- secure_app( #wrap in secure_app for authentication with shiny_manager. Und
       "))
       ),
       # Adjusting size of progress bar
-      tags$style(HTML("
-  .shiny-notification-content-progress {
-    font-size: 72px !important;
-    padding: 60px !important;
-  }
-  .progress {
-    height: 120px !important;
-  }
-  .progress-bar {
-    font-size: 64px !important;
-    line-height: 120px !important;
-  }
-")),
+      ## replacing this for the time being 
+#       tags$style(HTML("
+#   .shiny-notification-content-progress {
+#     font-size: 72px !important;
+#     padding: 60px !important;
+#   }
+#   .progress {
+#     height: 120px !important;
+#   }
+#   .progress-bar {
+#     font-size: 64px !important;
+#     line-height: 120px !important;
+#   }
+# ")),
 
       tabItems(
         #### Home Tab ####

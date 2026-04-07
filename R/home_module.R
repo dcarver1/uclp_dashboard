@@ -90,62 +90,80 @@ home_server <- function(id, loaded_data) {
         # Simulate time taken to read data
         Sys.sleep(2) 
         
-        # Mark done, set next to loading, trigger Step 2
+        # Mark done
         sync_status$cached_data <- "done"
+        
+        # --- API calls commented out ---
         sync_status$wet_api <- "loading"
-        later::later(function() { sync_step(2) }, delay = 0.1) 
+        later::later(function() { sync_step(2) }, delay = 0.1)
+
+        # Show success message immediately after cached data finishes
+        showNotification("Cached data stream initialized successfully!", type = "message")
         
-      } else if (sync_step() == 2) {
-        # WET API 
+      } 
+      else if (sync_step() == 2) {
+        # WET API
         Sys.sleep(2)
-        
+
         sync_status$wet_api <- "done"
         sync_status$hydrovu_api <- "loading"
         later::later(function() { sync_step(3) }, delay = 0.1)
-        
+
       } else if (sync_step() == 3) {
         # HydroVu API
         Sys.sleep(2)
-        
+
         sync_status$hydrovu_api <- "done"
         sync_status$contrail_api <- "loading"
         later::later(function() { sync_step(4) }, delay = 0.1)
-        
+
       } else if (sync_step() == 4) {
         # Contrail API
-        Sys.sleep(2) 
-        
+        Sys.sleep(2)
+
         # Final cleanup and combining data
         sync_status$contrail_api <- "done"
-        
+
         # Show a success message
         showNotification("All data streams initialized successfully!", type = "message")
       }
     })
-
+    
     # Render Home Map with latest snapshots
     output$home_map <- renderLeaflet({
+      
+      # Define a comfortable default bounding box around the watershed for the empty map
+      default_lng1 <- -106.5
+      default_lat1 <- 40.0
+      default_lng2 <- -104.0
+      default_lat2 <- 41.5
+      
       # Initial empty map before data loads
       if (is.null(loaded_data()) || nrow(loaded_data()) == 0) {
-        # Default view of the watershed
-        m <- leaflet() %>%
+        # Default view of the watershed with restricted bounds and zoom
+        m <- leaflet(options = leafletOptions(minZoom = 8)) %>%
           addTiles() %>%
           setView(lng = -105.3, lat = 40.6, zoom = 9) %>%
+          setMaxBounds(lng1 = default_lng1, lat1 = default_lat1, lng2 = default_lng2, lat2 = default_lat2) %>%
           addControl("Please click 'Initialize Data Streams' to load site locations and data.", position = "topright")
         return(m)
       }
+      
+      # Define the parameter you want to drive the map colors
+      target_param <- "Temperature" 
       
       # Process the snapshot data
       data <- loaded_data()
       
       # Find the latest reading for each site/parameter
       latest_readings <- data %>%
+        mutate(DT_round_MT = with_tz(DT_round, tzone = "America/Denver")) %>%
         group_by(site, parameter) %>%
         filter(DT_round == max(DT_round, na.rm = TRUE)) %>%
         slice(1) %>%
         ungroup()
-        
-      # Pivot so we have one row per site with columns for each parameter
+      
+      # Pivot so we have one row per site with text strings for the popups
       snapshot_wide <- latest_readings %>%
         select(site, DT_round_MT, parameter, mean, units) %>%
         # Combine value and units for display
@@ -156,9 +174,13 @@ home_server <- function(id, loaded_data) {
           values_from = display_val
         ) %>%
         left_join(site_table, by = c("site" = "site_code"))
-
+      
+      # Grab the raw numeric value for our target mapping parameter
+      target_numeric <- latest_readings %>%
+        filter(parameter == target_param) %>%
+        select(site, numeric_val = mean)
+      
       # Load spatial coordinates
-      # (Using the same logic as the Site Map tab)
       locations <- read_csv("data/sonde_location_metadata.csv", show_col_types = FALSE) %>%
         separate(col = "lat_long", into = c("lat", "lon"), sep = ",", convert = TRUE) %>%
         mutate(
@@ -166,17 +188,17 @@ home_server <- function(id, loaded_data) {
           site = ifelse(site %in% c("pman", "pbr"), paste0(site, "_fc"), site)
         ) %>%
         select(site, lat, lon, watershed)
-        
-      # Join spatial data with our snapshot data
+      
+      # Join spatial data with our snapshot strings AND numeric target data
       map_data <- locations %>%
         inner_join(snapshot_wide, by = "site") %>%
+        left_join(target_numeric, by = "site") %>%
         st_as_sf(coords = c("lon", "lat"), crs = 4326)
-
+      
       # Build HTML for popups dynamically based on available columns
-      # Exclude non-parameter columns from the stats list
       exclude_cols <- c("site", "DT_round_MT", "site_name", "color", "lat", "lon", "watershed", "geometry", "Site")
       param_cols <- setdiff(names(snapshot_wide), exclude_cols)
-
+      
       map_data$popup_content <- lapply(seq_len(nrow(map_data)), function(i) {
         row <- map_data[i, ]
         
@@ -197,22 +219,48 @@ home_server <- function(id, loaded_data) {
         
         return(HTML(popup))
       })
-
-      # Render the populated map
-      leaflet(map_data) %>%
+      
+      # Create a continuous color palette based on numeric values
+      pal <- colorNumeric(
+        palette = "viridis", 
+        domain = map_data$numeric_val,
+        na.color = "#a9a9a9" # Gray for sites missing this parameter
+      )
+      
+      # Dynamically grab the bounding box of the loaded points and add a small buffer
+      bbox <- st_bbox(map_data)
+      pad <- 0.15 # ~10 miles of padding so markers aren't cut off
+      
+      # Render the populated map with locked bounds
+      leaflet(map_data, options = leafletOptions(minZoom = 8)) %>%
         addTiles() %>%
+        setMaxBounds(
+          lng1 = bbox[["xmin"]] - pad, 
+          lat1 = bbox[["ymin"]] - pad, 
+          lng2 = bbox[["xmax"]] + pad, 
+          lat2 = bbox[["ymax"]] + pad
+        ) %>%
         addCircleMarkers(
-          radius = 8,
-          color = ~color,
-          fillOpacity = 0.8,
+          radius = 10,
+          color = "#333333",              
+          weight = 1.5,
+          fillColor = ~pal(numeric_val),  
+          fillOpacity = 0.9,
           popup = ~popup_content,
           label = ~site_name,
           labelOptions = labelOptions(noHide = FALSE, textsize = "14px")
+        ) %>%
+        addLegend(
+          position = "bottomright",
+          pal = pal,
+          values = ~numeric_val[!is.na(numeric_val)], 
+          title = paste("Latest", target_param),
+          opacity = 1
         )
     })
     
     # Return a reactive value indicating if the sync is completely finished
-    # This will be useful later when you want to pass the pooled data back to the main server
-    return(reactive({ sync_status$contrail_api == "done" }))
+    # Changed from contrail_api to cached_data
+    return(reactive({ sync_status$cached_data == "done" }))
   })
 }
