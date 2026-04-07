@@ -14,7 +14,23 @@ server <- function(input, output, session) {
   loaded_data <- reactiveVal(NULL)
 
   # Initialize home module
-  is_sync_done <- home_server("home", loaded_data)
+  home_state <- home_server("home", loaded_data)
+
+  # Sidebar Gating Logic
+  observe({
+    # List of tabs to disable until full sync is complete
+    tabs_to_gate <- c("sensor_data", "flow_data", "toc_forecasts", "map")
+    
+    if (home_state$full_sync_done()) {
+      for (tab in tabs_to_gate) {
+        shinyjs::removeCssClass(selector = paste0("a[data-value='", tab, "']"), class = "disabled-menu")
+      }
+    } else {
+      for (tab in tabs_to_gate) {
+        shinyjs::addCssClass(selector = paste0("a[data-value='", tab, "']"), class = "disabled-menu")
+      }
+    }
+  })
 
   # Reactive values for storing data
   values <- reactiveValues(
@@ -41,7 +57,7 @@ server <- function(input, output, session) {
 #TODO: This is done at load up, should it be moved to global?
   #### Pre loading API/Cached Data ####
   observe({
-    req(is_sync_done())
+    req(home_state$full_sync_done())
     # "message" is the bold title, "detail" is the printed talking point
     withProgress(message = "Dashboard Initialization", detail = "Starting up...", value = 0, {
       

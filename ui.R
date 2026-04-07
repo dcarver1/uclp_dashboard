@@ -22,10 +22,16 @@ ui <- # secure_app( #wrap in secure_app for authentication with shiny_manager. U
     ),
     #### Define Body Styling and start tabs ####
     dashboardBody(
+      shinyjs::useShinyjs(),
       tags$head(
         tags$style(HTML("
         .content-wrapper, .right-side {
           background-color: #f4f4f4;
+        }
+        .disabled-menu {
+          pointer-events: none;
+          opacity: 0.5;
+          cursor: not-allowed;
         }
       "))
       ),
