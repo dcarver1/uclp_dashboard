@@ -3,12 +3,12 @@
 
 server <- function(input, output, session) {
   # Call secure_server to check credentials
-  res_auth <- secure_server(
-    check_credentials = check_credentials(
-      db = "setup/credentials.sqlite",
-      passphrase = Sys.getenv("DB_PASSWORD")
-    )
-  )
+  # res_auth <- secure_server(
+  #   check_credentials = check_credentials(
+  #     db = "setup/credentials.sqlite",
+  #     passphrase = Sys.getenv("DB_PASSWORD")
+  #   )
+  # )
 
   #setup loaded data
   loaded_data <- reactiveVal(NULL)

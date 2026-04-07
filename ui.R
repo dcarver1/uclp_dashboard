@@ -1,7 +1,7 @@
 #UI
 
 #### Start UI ####
-ui <- secure_app( #wrap in secure_app for authentication with shiny_manager. Undo hash to enable, see `setup` folder for credentials and contact Sam Struthers for usernames/passwords
+ui <- # secure_app( #wrap in secure_app for authentication with shiny_manager. Undo hash to enable, see `setup` folder for credentials and contact Sam Struthers for usernames/passwords
   dashboardPage(
     dashboardHeader(title = "Water Quality Monitoring Dashboard"),
     #### Define Sidebar ####
@@ -223,5 +223,5 @@ ui <- secure_app( #wrap in secure_app for authentication with shiny_manager. Und
       )
     )
   )
-) #UNDO HASH TO ENABLE SHINY MANAGER AUTHENTICATION, SEE `setup` folder for credentials and contact Sam Struthers for usernames/passwords
+# ) #UNDO HASH TO ENABLE SHINY MANAGER AUTHENTICATION, SEE `setup` folder for credentials and contact Sam Struthers for usernames/passwords
 #### End of UI ####
