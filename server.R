@@ -2,6 +2,9 @@
 
 
 server <- function(input, output, session) {
+  # Store the main session in userData for module access
+  session$userData$parent_session <- session
+  
   # Call secure_server to check credentials
   # res_auth <- secure_server(
   #   check_credentials = check_credentials(
@@ -24,10 +27,14 @@ server <- function(input, output, session) {
     if (home_state$full_sync_done()) {
       for (tab in tabs_to_gate) {
         shinyjs::removeCssClass(selector = paste0("a[data-value='", tab, "']"), class = "disabled-menu")
+        # Remove the tooltip from the parent list item
+        shinyjs::runjs(sprintf("$('a[data-value=\"%s\"]').parent('li').removeAttr('title');", tab))
       }
     } else {
       for (tab in tabs_to_gate) {
         shinyjs::addCssClass(selector = paste0("a[data-value='", tab, "']"), class = "disabled-menu")
+        # Add a tooltip to the parent list item (since pointer-events: none on the <a> disables its own tooltips)
+        shinyjs::runjs(sprintf("$('a[data-value=\"%s\"]').parent('li').attr('title', 'Select the Initialize Data button to proceed to the detailed data pages');", tab))
       }
     }
   })
@@ -56,265 +63,138 @@ server <- function(input, output, session) {
 
 #TODO: This is done at load up, should it be moved to global?
   #### Pre loading API/Cached Data ####
-  observe({
-    req(home_state$full_sync_done())
+  observeEvent(home_state$start_sync(), {
+    req(home_state$start_sync() > 0)
+    
     # "message" is the bold title, "detail" is the printed talking point
     withProgress(message = "Dashboard Initialization", detail = "Starting up...", value = 0, {
       
-      incProgress(0.1, detail = "Validating date ranges and site selections...")
-      Sys.sleep(1)
-      
-      # read inputs once at startup
-      date_range <- isolate(input$date_range) 
-      sites_select <- isolate(input$sites_select)
-      parameters_select <- isolate(input$parameters_select)
-      
-      req(date_range, sites_select, parameters_select)
-      
-      sites_sel <- filter(site_table, site_name %in% sites_select) %>%
-        pull(site_code)
-      incProgress(0.3, detail = "Locating cached data files...")
+      print("--- STARTING DATA INITIALIZATION ---")
+      incProgress(0.1, detail = "Locating cached data files...")
       github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/data_backup.parquet"
-      #github_link <- "data/data_backup.parquet" #remove on live version and use ^ github link instead ^, this can be used for local testing
-      Sys.sleep(1)
       
-      incProgress(0.5, detail = "Importing historical parquet data...")
+      print(paste("Downloading cached data from:", github_link))
+      incProgress(0.2, detail = "Importing historical parquet data...")
       cached_data <- arrow::read_parquet(github_link, as_data_frame = TRUE)
-      Sys.sleep(1)
+      print(paste("Cached data loaded successfully. Total records:", nrow(cached_data)))
       
-      #### ---- Data pull between QAQC and Live ---- ####
-      # #Calculate max datetimes in cached dataset by site
-      max_dts <- cached_data%>%
+      #### ---- WET API PULL ---- ####
+      home_state$set_status("wet_api", "loading")
+      incProgress(0.4, detail = "Importing ROSS radio telemetry data (WET API)...")
+      
+      print("Calculating max datetimes in cached dataset by site...")
+      max_dts <- cached_data %>%
         summarise(max_DT = max(DT_round, na.rm = TRUE), .by = "site")
-
-      end_DT   <- as.POSIXct(paste0(date_range[2], " 23:55"), tz = "America/Denver")
-
-      #### WET API Pull ####
-      #check to see if we need to pull WET data
-      if(any(c("sfm", "chd", "pfal") %in% sites_sel)){
-        # Define invalid values to filter out (these are used by WET team for testing or if data is down)
-        invalid_values <- c(-9999, 638.30, -99.99)
-        # Define sites to pull data for
-        wet_sites <- c("sfm", "chd", "pfal")
-        #grab the sites from sites_sel
-        sites <- sites_sel[sites_sel %in% wet_sites]
-        #report out progress pre pull
-        #incProgress(0.2, detail = "Connecting to WET API...")
-        incProgress(0.2, detail = "Importing ROSS radio telemetry data...")
-        # Determine start date for each site based on cached data
-        site_start_DT <- filter(max_dts, site %in% sites)%>%
-          mutate(max_cached_DT = with_tz(max_DT, "America/Denver"))
-
-        # Pull in data from WET API for sfm, chd and pfal sites
-        wet_data <- map2(site_start_DT$site, site_start_DT$max_cached_DT,
-                         ~pull_wet_api(
-                           target_site = .x,
-                           start_datetime = .y,
-                           end_datetime = end_DT #always  today at midnight
-                         )) %>%
-          rbindlist()%>%
+      
+      # We pull data up to the end of the current day for initialization
+      end_DT <- as.POSIXct(paste0(Sys.Date(), " 23:55"), tz = "America/Denver")
+      
+      wet_sites <- c("sfm", "chd", "pfal")
+      invalid_values <- c(-9999, 638.30, -99.99)
+      
+      site_start_DT <- filter(max_dts, site %in% wet_sites) %>%
+        mutate(max_cached_DT = with_tz(max_DT, "America/Denver"))
+      
+      print(paste("Target WET sites identified:", paste(site_start_DT$site, collapse = ", ")))
+      
+      if(nrow(site_start_DT) > 0) {
+        print("Initiating WET API puller. This may take a moment depending on network connection...")
+        wet_data_raw <- map2(site_start_DT$site, site_start_DT$max_cached_DT,
+                         function(s, dt) {
+                           print(paste(" -> Pulling", s, "from", dt, "to", end_DT))
+                           pull_wet_api(
+                             target_site = s,
+                             start_datetime = dt,
+                             end_datetime = end_DT
+                           )
+                         }) %>%
+          rbindlist()
+        
+        print(paste("WET API pull returned", nrow(wet_data_raw), "raw rows."))
+        print("Cleaning WET data (removing invalid values and NAs)...")
+        
+        wet_data <- wet_data_raw %>%
           filter(value %nin% invalid_values, !is.na(value)) %>%
           split(f = list(.$site, .$parameter), sep = "-")
-
-        #Saving to parquet file for faster loading later on
-        #arrow::write_parquet(wet_data, paste0("data/wet_testing_subset_",as.Date(start_DT),"_",as.Date(end_DT),".parquet"))
-        #Pre loading API pulled data for faster displaying
-        #wet_data <- read_parquet(file = "data/wet_testing_subset_2025-06-22_2025-08-08.parquet")%>%   #Update dates as needed
-        #remove invalid values or NAs
-        # filter(value %nin% invalid_values, !is.na(value)) %>%
-        # split(f = list(.$site, .$parameter), sep = "-")
-
-
-      }else{
-        #return blank list
+          
+        print("WET data cleaning and splitting complete.")
+      } else {
+        print("No WET sites identified. Skipping pull.")
         wet_data <- list()
       }
-
-      #### HydroVu API Pull ####
-
-      # check to see if we need to pull from PBD
-      if("pbd" %in% sites_sel){
-        sites <- c("pbd")
-
-        incProgress(0.4, detail = "Importing HydroVu Data...")
-
-        # Code to actually pull in from API
-
-        # # suppress scientific notation to ensure consistent formatting
-        options(scipen = 999)
-
-        # Establishing staging directory (temp_dir()) for storing API pulled data to merge with cached data
-        staging_directory = tempdir()
-
-        # Read in credentials
-        hv_creds <- read_yaml("creds/HydroVuCreds.yml")
-        hv_token <- hv_auth(client_id = as.character(hv_creds["client"]),
-                            client_secret = as.character(hv_creds["secret"]))
-
-        # Pulling in the data from hydrovu
-        # Making the list of sites that we need
-        hv_sites <- hv_locations_all(hv_token) %>%
-          filter(!grepl("vulink", name, ignore.case = TRUE)) %>%
-          #sondes with 2024 in the name can be avoided to speed up the live data pull
-          #these should be included in the historical data pull
-          filter(!grepl("2023|2024", name, ignore.case = TRUE))
-
-        site_start_DT <- filter(max_dts, site %in% sites)
-
-        walk(sites,
-             function(site) {
-               message("Requesting HV data for: ", site)
-               ross.wq.tools::api_puller(
-                 site = site_start_DT$site,
-                 start_dt = site_start_DT$max_DT, # api puller needs UTC dates
-                 end_dt = with_tz(end_DT, tzone = "UTC"),
-                 api_token = hv_token,
-                 hv_sites_arg = hv_sites,
-                 dump_dir = staging_directory
-               )
-             }
-        )
-        #
-        api_data <- map_dfr(list.files(staging_directory, full.names = TRUE, pattern = "*.parquet"),
-                            function(file_path) {
-                              site_df <- arrow::read_parquet(file_path, as_data_frame = TRUE)
-                              return(site_df)
-                            })
-
-        hv_data <- api_data %>%
-          # Remove ID column
-          dplyr::select(-id) %>%
-          # Ensure units are stored as character strings for consistency
-          dplyr::mutate(units = as.character(units))%>%
-          # Filter out VuLink data (not used in CSU/FCW networks)
-          #dplyr::filter(!grepl("vulink", name, ignore.case = TRUE)) %>%
-          # Filter out Virridy data (not used in CSU/FCW networks)
-          #dplyr::filter(!grepl("virridy", name, ignore.case = TRUE)) %>%
-          # Remove the equipment name column
-          #dplyr::select(-name) %>%
-          dplyr::mutate(
-            # Round timestamps to specified interval for consistent time series
-            DT = timestamp,
-            DT_round = lubridate::round_date(DT, "15 minutes"),
-            # Create string version of timestamp for joining operations
-            DT_join = as.character(DT_round),
-            # Ensure site names are lowercase for consistency
-            site = tolower(site)
-          ) %>%
-          # Ensure no duplicates after all transformations
-          dplyr::distinct(.keep_all = TRUE)%>%
-          split(f = list(.$site, .$parameter), sep = "-") %>%
-          keep(~nrow(.) > 0)
-      #
-      #
-      #   #Saving to parquet file for faster loading later on
-      #   #arrow::write_parquet(hv_data, paste0("data/hv_testing_subset_",as.Date(start_DT),"_",as.Date(end_DT),".parquet"))
-      #   #Pre loading API pulled data for faster displaying
-      #   # hv_data <- read_parquet(file = "data/hv_testing_subset_2025-06-22_2025-08-08.parquet")%>%   #Update dates as needed
-      #   #   split(f = list(.$site, .$parameter), sep = "-") %>%
-      #   #   keep(~nrow(.) > 0)
-      #
-      }else{
-        hv_data <- list()
-      }
-      #
-      # #### Contrail API Pull ####
-      #
-      #check to see if we need to access contrail
-      if(any(c("pbr_fc", "pman_fc") %in% sites_sel)) {
-        incProgress(0.7, detail = "Importing Contrail Data...")
-
-        # Define sites to pull data for
-        contrail_sites <- c("pbr_fc", "pman_fc")
-        #grab the sites from sites_sel
-        sites <- sites_sel[sites_sel %in% contrail_sites]
-
-        trim_sites <- toupper(gsub("_fc", "", sites))
-
-        # Read/set up credentials
-        creds <- yaml::read_yaml( "creds/ContrailCreds.yml") %>%
-          unlist()
-        username <- as.character(creds["username"])
-        password <- as.character(creds["password"])
-        login_url <- as.character(creds["login_url"])
-        # Determine start date for contrail sites based on cached data
-        contrail_start_DTs <- filter(max_dts, site %in% sites)%>%
-          mutate(max_cached_DT = with_tz(max_DT, "America/Denver"))
-
-        #get the earliest max date to ensure we get all data)
-        contrail_start_DT <- min(contrail_start_DTs$max_cached_DT)
-
-        # Call the downloader function
-        contrail_data <- pull_contrail_api(contrail_start_DT, end_DT, username,password, login_url)
-
-        #Saving to parquet file for faster loading later on
-        #arrow::write_parquet(contrail_data, paste0("data/contrail_testing_subset_",as.Date(start_DT),"_",as.Date(end_DT),".parquet"))
-        #Pre loading API pulled data for faster displaying
-        # contrail_data <- read_parquet(file = "data/contrail_testing_subset_2025-06-22_2025-08-08.parquet")%>%   #Update dates as needed
-        #   split(f = list(.$site, .$parameter), sep = "-") %>%
-        #   keep(~nrow(.) > 0)
-
-      }else{
-        contrail_data <- list()
-      }
-
+      
+      home_state$set_status("wet_api", "done")
+      
+      #### ---- HYDROVU & CONTRAIL API PULLS (MOCKED FOR NOW) ---- ####
+      # As requested, focusing only on WET dataset workflow first.
+      print("Skipping HydroVu and Contrail pulls for now (Mocking as done)...")
+      home_state$set_status("hydrovu_api", "done")
+      home_state$set_status("contrail_api", "done")
+      hv_data <- list()
+      contrail_data <- list()
+      
       #### Data Aggregation  ####
-
-      incProgress(0.9, detail = "Processing data...")
-      # combine all data
+      incProgress(0.7, detail = "Processing data...")
+      print("Aggregating API data...")
       all_data_raw <- c(hv_data, wet_data, contrail_data)
 
-      # remove stage data
       list_names <- names(all_data_raw)
       keep_indices <- !grepl("stage", list_names, ignore.case = TRUE)
       all_data_raw <- all_data_raw[keep_indices]
-      # Failsafe if there is no data
+      
       if(length(all_data_raw) == 0){
-        stop("No data found for the selected sites and date range.")
+        print("Warning: No new API data found.")
+        combined_data <- data.frame()
+      } else {
+        print("Tidying API data...")
+        tidy_data <- all_data_raw %>%
+          map(~tidy_api_data(api_data = .)) %>%  
+          keep(~!is.null(.))
+
+        print("Pulling field notes from mWater...")
+        mWater_creds <- read_yaml("creds/mWaterCreds.yml")
+        mWater_data <- load_mWater(creds = mWater_creds)
+        
+        all_field_notes <- grab_mWater_sensor_notes(mWater_api_data = mWater_data) %>%
+          mutate(DT_round = with_tz(DT_round, tzone = "UTC"),
+                 last_site_visit = with_tz(last_site_visit, tzone = "UTC"),
+                 DT_join = as.character(DT_round))
+
+        sensor_malfunction_notes <- grab_mWater_malfunction_notes(mWater_api_data = mWater_data) %>%
+          mutate(start_DT = with_tz(start_DT, tzone = "UTC"),
+                 end_DT = with_tz(end_DT, tzone = "UTC"))
+
+        print("Adding field notes to tidied data...")
+        combined_data <- tidy_data %>%
+          map(~add_field_notes(df = ., notes = all_field_notes), .progress = TRUE) %>%
+          bind_rows() %>%
+          mutate(auto_flag = NA,
+                 mal_flag = NA)
       }
 
-      # Tidy all the raw files
-      tidy_data <- all_data_raw %>%
-        map(~tidy_api_data(api_data = .)) %>%  # the summarize interval default is 15 minutes
-        keep(~!is.null(.))
-
-      #add field notes
-      # Pulling in the data from mWater (where we record our field notes)
-      mWater_creds <- read_yaml("creds/mWaterCreds.yml")
-      mWater_data <- load_mWater(creds = mWater_creds)
-      all_field_notes <- grab_mWater_sensor_notes(mWater_api_data = mWater_data) %>%
-        #notes come in as MST, converting to UTC
-        mutate(DT_round = with_tz(DT_round, tzone = "UTC"),
-               last_site_visit = with_tz(last_site_visit, tzone = "UTC"),
-               DT_join = as.character(DT_round))
-
-      sensor_malfunction_notes <- grab_mWater_malfunction_notes(mWater_api_data = mWater_data) %>%
-        #notes come in as MST, converting to UTC
-        mutate(start_DT = with_tz(start_DT, tzone = "UTC"),
-               end_DT = with_tz(end_DT, tzone = "UTC"))
-
-      # Add the field note data to all of the data
-      # This is the most recent uncleaned data that we got from the API
-      combined_data <- tidy_data %>%
-        map(~add_field_notes(df = ., notes = all_field_notes), .progress = TRUE)%>%
-        bind_rows()%>%
-        mutate(auto_flag = NA,
-               mal_flag = NA)
-      #### ---- End of data pull between QAQC and Live ---- ####
-
-
-      incProgress(0.8, detail = "Structuring and deduplicating dataset...")
-      dashboard_data <- cached_data %>%
-        arrange(site, parameter, DT_round) %>%
-        distinct(site, parameter, DT_round, .keep_all = TRUE) %>%
-        ungroup()
+      incProgress(0.9, detail = "Structuring and deduplicating dataset...")
+      print("Merging new data with cached data and deduplicating...")
       
-      incProgress(0.9, detail = "Rendering final UI components...")
-      Sys.sleep(0.5) # A tiny pause so the user can actually read the final step
+      if(nrow(combined_data) > 0) {
+        dashboard_data <- bind_rows(cached_data, combined_data) %>%
+          arrange(site, parameter, DT_round) %>%
+          distinct(site, parameter, DT_round, .keep_all = TRUE) %>%
+          ungroup()
+      } else {
+        dashboard_data <- cached_data %>%
+          arrange(site, parameter, DT_round) %>%
+          distinct(site, parameter, DT_round, .keep_all = TRUE) %>%
+          ungroup()
+      }
       
-      # Set the loaded data
+      print("--- DATA INITIALIZATION COMPLETE ---")
+      Sys.sleep(0.5) 
       incProgress(1, detail = "Data successfully loaded!")
+      
+      # Finalize Initialization
       loaded_data(dashboard_data)
+      home_state$set_status("all_done", TRUE)
+      showNotification("Data streams initialized successfully!", type = "message")
     })
   })
 

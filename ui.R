@@ -6,7 +6,7 @@ ui <- # secure_app( #wrap in secure_app for authentication with shiny_manager. U
     dashboardHeader(title = "Water Quality Monitoring Dashboard"),
     #### Define Sidebar ####
     dashboardSidebar(
-      sidebarMenu(
+      sidebarMenu(id = "sidebar",
         menuItem("Home", tabName = "home", icon = icon("home")),
         menuItem("Live WQ Data", tabName = "sensor_data", icon = icon("chart-line")),
         #Placeholder for future functions
@@ -36,21 +36,37 @@ ui <- # secure_app( #wrap in secure_app for authentication with shiny_manager. U
       "))
       ),
       # Adjusting size of progress bar
-      ## replacing this for the time being 
-#       tags$style(HTML("
-#   .shiny-notification-content-progress {
-#     font-size: 72px !important;
-#     padding: 60px !important;
-#   }
-#   .progress {
-#     height: 120px !important;
-#   }
-#   .progress-bar {
-#     font-size: 64px !important;
-#     line-height: 120px !important;
-#   }
-# ")),
-
+      tags$style(HTML("
+        #shiny-notification-panel {
+          right: auto !important;
+          left: 20px !important;
+          bottom: 20px !important;
+          width: 500px !important;
+        }
+        .shiny-notification-content-text {
+          font-size: 24px !important;
+          line-height: 1.2 !important;
+        }
+        .shiny-notification-content-action {
+          font-size: 24px !important;
+        }
+        .shiny-notification {
+          width: 100% !important;
+          padding: 30px !important;
+          opacity: 0.95 !important;
+        }
+        .shiny-notification-content-progress {
+          margin-top: 15px !important;
+        }
+        .progress {
+          height: 30px !important;
+        }
+        .progress-bar {
+          font-size: 18px !important;
+          line-height: 30px !important;
+        }
+      ")),
+      
       tabItems(
         #### Home Tab ####
         home_ui("home"),
