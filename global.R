@@ -39,7 +39,7 @@ suppressMessages({
   library(devtools) # this might be needed as ross.wq and cddsr are not on cran 
   # Shiny
   library(shiny)
-  # library(shinymanager) # maybe? 
+  library(shinymanager) # maybe? 
   library(shinycssloaders)
   # library(shinyTime)
   library(bslib)
