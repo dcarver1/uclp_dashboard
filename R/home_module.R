@@ -10,15 +10,17 @@ home_ui <- function(id) {
             tags$style(HTML(paste0("
               #", ns("home_map_container"), " {
                 position: relative;
-                height: 50vh;
+                height: calc((100vh - 50px) * 0.55);
                 margin: -15px -15px 0 -15px;
                 border-bottom: 2px solid #ddd;
               }
               #", ns("home_plot_container"), " {
-                height: calc(50vh - 80px);
+                height: calc((100vh - 50px) * 0.45);
                 margin: 0 -15px -15px -15px;
-                padding: 15px;
+                padding: 10px 15px;
                 background-color: #f9f9f9;
+                display: flex;
+                flex-direction: column;
               }
               .map-overlay {
                 position: absolute;
@@ -69,8 +71,10 @@ home_ui <- function(id) {
           ),
           
           div(id = ns("home_plot_container"),
-              h4("Fort Collins Intake Total Organic Carbon (TOC) Forecast", style = "margin-top: 0; text-align: center;"),
-              plotlyOutput(ns("intake_toc_forecast_plot"), height = "100%") %>% withSpinner()
+              h4("Fort Collins Intake Total Organic Carbon (TOC) Forecast", style = "margin-top: 0; margin-bottom: 10px; text-align: center; flex: 0 0 auto;"),
+              div(style = "flex: 1 1 auto; min-height: 0;",
+                  plotlyOutput(ns("intake_toc_forecast_plot"), height = "100%")
+              )
           )
   )
 }
@@ -137,7 +141,7 @@ home_server <- function(id, loaded_data) {
       }
       
       if (is.null(data_to_use) || nrow(data_to_use) == 0) {
-        return(leaflet() %>% addTiles() %>% setView(lng = -105.3, lat = 40.6, zoom = 9))
+        return(leaflet() %>% addTiles() %>% setView(lng = -105.3, lat = 40.6, zoom = 10))
       }
       
       latest_readings <- data_to_use %>%
@@ -264,6 +268,7 @@ home_server <- function(id, loaded_data) {
       }
       
       leaflet(map_data) %>%
+        setView(lng = -105.3, lat = 40.6, zoom = 9) %>%
         addProviderTiles(providers$CartoDB.Positron, group = "Clean") %>%
         addProviderTiles(providers$Esri.WorldTopoMap, group = "Topographic") %>%
         addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
@@ -299,6 +304,8 @@ home_server <- function(id, loaded_data) {
     
     # Render Intake TOC Forecast Plot
     output$intake_toc_forecast_plot <- renderPlotly({
+      req(input$home_map_zoom) # Defer plot processing until the leaflet map has initialized and rendered
+      
       intake_forecast_github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/toc_forecast_intake_backup.parquet"
       
       intake_cached_data <- arrow::read_parquet(intake_forecast_github_link, as_data_frame = TRUE) %>%
@@ -365,10 +372,10 @@ home_server <- function(id, loaded_data) {
           shapes = hline_shapes,
           hovermode = "x unified",
           legend = list(orientation = 'h', y = -0.2),
-          margin = list(t = 40)
+          margin = list(t = 30, b = 30, l = 50, r = 20)
         )
       
-      p
+      p %>% config(displayModeBar = FALSE)
     })
     
     return(list(
