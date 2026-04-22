@@ -101,7 +101,7 @@ apply_toc_model <- function(sensor_data, toc_model_file_path, scaling_params_fil
     apply_training_scale(new_data = ., scaling_params = scaling_params,features = features) %>%
     mutate( !!sym(time_col) := round_date(!!sym(time_col), unit = summarize_interval))%>%
     #summarize to the specified interval
-    summarize(across(any_of(c(features)), median, na.rm = TRUE),.by = c(!!sym(site_col), !!sym(time_col)))
+    summarize(across(any_of(c(features)), \(x) median(x, na.rm = TRUE)),.by = c(!!sym(site_col), !!sym(time_col)))
 
   target_col = "TOC"
   #Using each model, make a prediction on the da
@@ -116,10 +116,15 @@ apply_toc_model <- function(sensor_data, toc_model_file_path, scaling_params_fil
     has_na <- rowSums(is.na(feature_data)) > 0
 
     # Make preds using a single model
-    raw_preds <- feature_data %>%
-      as.matrix()%>%
-      predict(.x, ., iteration_range = c(1, .x$best_iteration)) %>%
-      round(2)
+    raw_preds <- tryCatch({
+      feature_data %>%
+        as.matrix()%>%
+        predict(.x, ., iteration_range = c(1, .x$best_iteration)) %>%
+        round(2)
+    }, error = function(e) {
+      warning("XGBoost prediction failed: ", e$message)
+      rep(NA_real_, nrow(feature_data))
+    })
 
     # make preds NA where features had NA
     final_preds <- if_else(has_na, NA_real_, raw_preds)
