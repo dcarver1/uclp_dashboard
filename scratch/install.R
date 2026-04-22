@@ -34,7 +34,6 @@ pacman::p_load(
   # Core data manipulation
   tidyverse, DT, purrr, data.table, arrow
   # why the whole tidyverse, 
-  # why DT and data.table? 
 
 )
 
