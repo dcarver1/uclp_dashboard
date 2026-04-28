@@ -110,6 +110,8 @@ home_server <- function(id, loaded_data) {
       wet_api = "pending",
       hydrovu_api = "pending",
       contrail_api = "pending",
+      cdwr_flow_api = "pending",
+      snotel_api = "pending",
       all_done = FALSE
     )
     
@@ -125,7 +127,9 @@ home_server <- function(id, loaded_data) {
           p(get_icon(sync_status$cached_data), " Snapshot Data Loaded"),
           p(get_icon(sync_status$wet_api), " Pulling WET API"),
           p(get_icon(sync_status$hydrovu_api), " Pulling HydroVu API"),
-          p(get_icon(sync_status$contrail_api), " Pulling Contrail API")
+          p(get_icon(sync_status$contrail_api), " Pulling Contrail API"),
+          p(get_icon(sync_status$cdwr_flow_api), " Pulling CDWR Flow API"),
+          p(get_icon(sync_status$snotel_api), " Pulling SNOTEL API")
         )
       )
     })

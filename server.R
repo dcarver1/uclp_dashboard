@@ -44,6 +44,8 @@ server <- function(input, output, session) {
     all_data = NULL,
     site_locations = NULL,
     flow_sites = NULL,
+    clp_snotel_data = NULL,
+    canyon_q = NULL,
     last_refresh = Sys.time()
   )
 
@@ -133,6 +135,134 @@ server <- function(input, output, session) {
       hv_data <- list()
       contrail_data <- list()
       
+      #### ---- CDWR FLOW API PULL ---- ####
+      home_state$set_status("cdwr_flow_api", "loading")
+      incProgress(0.5, detail = "Retrieving CDWR flow sites data...")
+      print("Pulling CDWR flow data for map/flow charts...")
+      
+      tryCatch({
+        sites <- read_csv(file = "data/cdwr_sites_oi.csv", show_col_types = F)
+        
+        if (nrow(sites) > 0) {
+          end_date <- as.character(Sys.Date() + days(1))
+          start_date <- as.character(Sys.Date() - days(7))
+          
+          flow_sites_res <- sites %>%
+            split(1:nrow(.)) %>%
+            map_dfr(function(site_row) {
+              site_id <- site_row$abbrev
+              param_code <- site_row$parameter
+              
+              make_empty_row <- function(msg = "No Data") {
+                site_row %>%
+                  as_tibble() %>%
+                  mutate(
+                    current_flow_cfs = NA_real_,
+                    flow_slope = NA_real_,
+                    trend = msg,
+                    nested_data = list(tibble(DT_round = as.POSIXct(character()), flow = numeric(), abbrev = character()))
+                  ) %>%
+                  select(abbrev, station_name, data_source, water_source, gnis_id, latitude, longitude,
+                         current_flow_cfs, flow_slope, trend, structure_type, site_type = station_type, nested_data)
+              }
+              
+              result <- tryCatch({
+                flow_data <- get_telemetry_ts(
+                  abbrev = site_id,
+                  parameter = param_code,
+                  start_date = start_date,
+                  end_date = end_date,
+                  api_key = cdwr_api_key,
+                  timescale = "raw"
+                ) %>%
+                  mutate(DT_round = round_date(datetime, "15 min")) %>%
+                  group_by(DT_round) %>%
+                  summarise(flow = mean(meas_value, na.rm = TRUE), .groups = "drop") %>%
+                  mutate(abbrev = site_id)
+                
+                if (nrow(flow_data) == 0) return(make_empty_row("No Records"))
+                
+                end_time <- Sys.time()
+                start_time_24h <- end_time - hours(24)
+                iv_data <- flow_data %>% filter(DT_round >= start_time_24h & DT_round <= end_time)
+                
+                if (nrow(iv_data) >= 2) {
+                  flow_model <- lm(flow ~ DT_round, data = iv_data)
+                  slope <- coef(flow_model)[2]
+                  
+                  current_flow <- iv_data %>%
+                    arrange(DT_round) %>%
+                    slice_tail(n = 1) %>%
+                    pull(flow)
+                  
+                  site_row %>%
+                    as_tibble() %>%
+                    mutate(
+                      current_flow_cfs = current_flow,
+                      flow_slope = slope * 3600,
+                      trend = if_else(current_flow_cfs == 0, "NoFlow",
+                                      if_else(flow_slope > 0, "increasing", "decreasing")),
+                      nested_data = list(flow_data)
+                    ) %>%
+                    select(abbrev, station_name, data_source, water_source, gnis_id, latitude, longitude,
+                           current_flow_cfs, flow_slope, trend, structure_type, site_type = station_type, nested_data)
+                } else {
+                  make_empty_row("Insufficient Data for Trend")
+                }
+              }, error = function(e) {
+                make_empty_row("API Error/No Records")
+              })
+              
+              return(result)
+            })
+            
+            values$flow_sites <- flow_sites_res
+            print(paste("CDWR flow data pulled successfully for", nrow(flow_sites_res), "sites."))
+        }
+      }, error = function(e) {
+        print(paste("CDWR Error:", e$message))
+      })
+      home_state$set_status("cdwr_flow_api", "done")
+      
+      #### ---- SNOTEL API PULL ---- ####
+      home_state$set_status("snotel_api", "loading")
+      incProgress(0.6, detail = "Retrieving SNOTEL snowpack data...")
+      print("Pulling SNOTEL data...")
+      tryCatch({
+        clp_snotel_url <- "https://nwcc-apps.sc.egov.usda.gov/awdb/basin-plots/POR/WTEQ/assocHUC8/10190007_Cache_La_Poudre.csv"
+        snotel_df <- read.csv(clp_snotel_url)
+        names(snotel_df) <- gsub("^X", "", names(snotel_df))
+        values$clp_snotel_data <- snotel_df
+        print("SNOTEL data pulled successfully.")
+      }, error = function(e) {
+        print(paste("SNOTEL Error:", e$message))
+      })
+      home_state$set_status("snotel_api", "done")
+
+      #### ---- CANYON MOUTH HISTORICAL FLOW (For TOC Model) ---- ####
+      incProgress(0.65, detail = "Retrieving Canyon Mouth historical flow data...")
+      print("Pulling historical flow for Canyon Mouth (CLAFTCCO)...")
+      tryCatch({
+        # Find min and max date from cached data for the historical pull
+        min_date <- as.Date(min(cached_data$DT_round, na.rm = TRUE)) - days(1)
+        max_date <- as.Date(max(cached_data$DT_round, na.rm = TRUE)) + days(1)
+        
+        canyon_q_res <- cdssr::get_telemetry_ts(
+          abbrev = "CLAFTCCO",
+          start_date = min_date,
+          end_date = max_date,
+          api_key = cdwr_api_key,
+          timescale = "hour"
+        ) %>%
+          mutate(date = as_date(datetime)) %>%
+          summarize(canyon_mouth_daily_flow_cfs = mean(meas_value, na.rm = TRUE), .by = date)
+        
+        values$canyon_q <- canyon_q_res
+        print("Historical flow pulled successfully.")
+      }, error = function(e) {
+        print(paste("Canyon Flow Error:", e$message))
+      })
+
       #### Data Aggregation  ####
       incProgress(0.7, detail = "Processing data...")
       print("Aggregating API data...")
@@ -447,7 +577,8 @@ server <- function(input, output, session) {
                                      #summarizing model input results to user selected timestep (15 min -> 1 day)
                                      summarize_interval = input$data_timestep,
                                      time_col = "DT_round_MT",
-                                     value_col = "mean") %>%
+                                     value_col = "mean",
+                                     canyon_q_data = values$canyon_q) %>%
       left_join(site_table, by = c("site" = "site_code"))%>%
       mutate(across(contains("TOC_guess"), ~ round(.x, 2)))
     #parameter to plot
@@ -907,109 +1038,8 @@ server <- function(input, output, session) {
   #TODO: pull out into separate function to clean up server and make more modular
   # get data for site conditions
   flow_sites_data <- reactive({
-    withProgress(message = "Retrieving Poudre flow sites data...", {
-
-      #Code used to generate the list of sites stored in `data/cdwr_sites_oi.csv` to pull data for (only need to run this once and can save the output as a CSV to read in later)
-      # clp_sites <- get_telemetry_stations(water_district = 3 )%>% # Specify Poudre basin
-      #   filter(station_por_end > Sys.Date() - days(30))%>%# only grab active sites
-      #   filter(grepl("DIS", parameter))#filter for flow sites only
-      #
-      # laramie_sites <- get_telemetry_stations(water_district = 48 )%>% # Specify Laramie basin
-      #   filter(station_por_end > Sys.Date() - days(30))%>%# only grab active sites
-      #   filter(grepl("DIS", parameter))#filter for flow sites only
-      #
-      # sites <- bind_rows(clp_sites, laramie_sites)%>%
-      #   filter(abbrev %in% cdwr_upper_clp_sites)
-
-      sites <- read_csv(file = "data/cdwr_sites_oi.csv", show_col_types = F)
-
-      # If no sites found, return empty tibble
-      if (nrow(sites) == 0) {
-        return(tibble())
-      }
-
-      # Define date range for the last 8 days
-      end_date <- as.character(Sys.Date()+ days(1))
-      start_date <- as.character(Sys.Date() - days(7))
-
-      # Map over sites to get the last 7 days of flow
-      active_sites <- sites %>%
-        split(1:nrow(.)) %>%
-        map_dfr(function(site_row) {
-          site_id <- site_row$abbrev
-          param_code <- site_row$parameter
-
-          # Pre-define empty/failure row structure to ensure consistency
-          make_empty_row <- function(msg = "No Data") {
-            site_row %>%
-              as_tibble() %>%
-              mutate(
-                current_flow_cfs = NA_real_,
-                flow_slope = NA_real_,
-                trend = msg,
-                nested_data = list(tibble(DT_round = as.POSIXct(character()), flow = numeric(), abbrev = character()))
-              ) %>%
-              select(abbrev, station_name, data_source, water_source, gnis_id, latitude, longitude,
-                     current_flow_cfs, flow_slope, trend, structure_type, site_type = station_type, nested_data)
-          }
-
-          result <- tryCatch({
-            # 1. API Call
-            flow_data <- get_telemetry_ts(
-              abbrev = site_id,
-              parameter = param_code,
-              start_date = start_date,
-              end_date = end_date,
-              api_key = cdwr_api_key,
-              timescale = "raw"
-            ) %>%
-              mutate(DT_round = round_date(datetime, "15 min")) %>%
-              group_by(DT_round) %>%
-              summarise(flow = mean(meas_value, na.rm = TRUE), .groups = "drop") %>%
-              mutate(abbrev = site_id)
-
-            # 2. Validation: Do we have any data at all?
-            if (nrow(flow_data) == 0) return(make_empty_row("No Records"))
-
-            # 3. Filter for recent 24h
-            end_time <- Sys.time()
-            start_time <- end_time - hours(24)
-            iv_data <- flow_data %>% filter(DT_round >= start_time & DT_round <= end_time)
-
-            # 4. Calculate metrics if enough data exists for regression (min 2 points)
-            if (nrow(iv_data) >= 2) {
-              flow_model <- lm(flow ~ DT_round, data = iv_data)
-              slope <- coef(flow_model)[2]
-
-              current_flow <- iv_data %>%
-                arrange(DT_round) %>%
-                slice_tail(n = 1) %>%
-                pull(flow)
-
-              site_row %>%
-                as_tibble() %>%
-                mutate(
-                  current_flow_cfs = current_flow,
-                  flow_slope = slope * 3600, # cfs/hr
-                  trend = if_else(current_flow_cfs == 0, "NoFlow",
-                                  if_else(flow_slope > 0, "increasing", "decreasing")),
-                  nested_data = list(flow_data)
-                ) %>%
-                select(abbrev, station_name, data_source, water_source, gnis_id, latitude, longitude,
-                       current_flow_cfs, flow_slope, trend, structure_type, site_type = station_type, nested_data)
-            } else {
-              # Has data, but not enough for a 24h trend
-              make_empty_row("Insufficient Data for Trend")
-            }
-
-          }, error = function(e) {
-            # Handle API Errors (like MUNCANCO returning 0 records)
-            make_empty_row("API Error/No Records")
-          })
-
-          return(result)
-        })
-    })
+    req(values$flow_sites)
+    values$flow_sites
   })
   # Create the map of the flow sites
   output$map <- renderLeaflet({
@@ -1184,13 +1214,8 @@ server <- function(input, output, session) {
   # Generate SNOTEL plot (will only be displayed if the card is visible)
   #TODO: Functionalize similar to clp rainbow plot to clean up server and make it more modular
   output$snotel_plot <- renderPlotly({
-
-    clp_snotel_url <- "https://nwcc-apps.sc.egov.usda.gov/awdb/basin-plots/POR/WTEQ/assocHUC8/10190007_Cache_La_Poudre.csv"
-    #download the csv
-    #clp_snotel_data <- read.csv(clp_snotel_url, skip = 1)
-    clp_snotel_data <- read.csv(clp_snotel_url)
-    #drop the X from names
-    names(clp_snotel_data) <- gsub("^X", "", names(clp_snotel_data))
+    req(values$clp_snotel_data)
+    clp_snotel_data <- values$clp_snotel_data
 
     #grab last year
     cur_year = year(Sys.Date())

@@ -52,7 +52,7 @@
 
 
 apply_toc_model <- function(sensor_data, toc_model_file_path, scaling_params_file_path, summarize_interval = "1 hour",
-                            time_col = "DT_round", site_col = "site", parameter_col = "parameter", value_col = "mean"){
+                            time_col = "DT_round", site_col = "site", parameter_col = "parameter", value_col = "mean", canyon_q_data = NULL){
 
   #Load TOC model
   toc_models <- read_ext(toc_model_file_path)
@@ -78,19 +78,19 @@ apply_toc_model <- function(sensor_data, toc_model_file_path, scaling_params_fil
            any_of(features))%>%
     mutate(date = as_date(!!sym(time_col)))
 
-  canyon_q <- cdssr::get_telemetry_ts(abbrev = "CLAFTCCO",
-                                        start_date = min(processed_sensor_data[[time_col]], na.rm = TRUE) - days(1),
-                                        end_date = max(processed_sensor_data[[time_col]], na.rm = TRUE) + days(1),
-                                        api_key = cdwr_api_key,
-                                      timescale = "hour")%>%
-    mutate(date = as_date(datetime))%>%
-    summarize(canyon_mouth_daily_flow_cfs = mean(meas_value, na.rm = TRUE), .by = date)
-    #TODO:Import daily canyon mouth flow from CDWR and merge to model input data to improve predictions at canyon mouth site.
-    #This will require some additional processing to align the flow data with the sensor data (e.g. summarizing to daily, merging on date, etc.)
+  if (is.null(canyon_q_data)) {
+    # Fallback if not provided
+    canyon_q_data <- cdssr::get_telemetry_ts(abbrev = "CLAFTCCO",
+                                          start_date = min(processed_sensor_data[[time_col]], na.rm = TRUE) - days(1),
+                                          end_date = max(processed_sensor_data[[time_col]], na.rm = TRUE) + days(1),
+                                          api_key = cdwr_api_key,
+                                        timescale = "hour")%>%
+      mutate(date = as_date(datetime))%>%
+      summarize(canyon_mouth_daily_flow_cfs = mean(meas_value, na.rm = TRUE), .by = date)
+  }
 
-
-    model_input_data <-  processed_sensor_data %>%
-      left_join(canyon_q, by = "date")%>%
+  model_input_data <-  processed_sensor_data %>%
+    left_join(canyon_q_data, by = "date")%>%
     na.omit() # remove any rows missing needed values
 
   # Load saved scaling parameters and model
