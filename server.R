@@ -76,13 +76,13 @@ server <- function(input, output, session) {
       github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/data_backup.parquet"
       
       print(paste("Downloading cached data from:", github_link))
-      incProgress(0.2, detail = "Importing historical parquet data...")
+      incProgress(0.1, detail = "Importing historical parquet data...")
       cached_data <- arrow::read_parquet(github_link, as_data_frame = TRUE)
       print(paste("Cached data loaded successfully. Total records:", nrow(cached_data)))
       
       #### ---- WET API PULL ---- ####
       home_state$set_status("wet_api", "loading")
-      incProgress(0.4, detail = "Importing ROSS radio telemetry data (WET API)...")
+      incProgress(0.15, detail = "Importing ROSS radio telemetry data (WET API)...")
       
       print("Calculating max datetimes in cached dataset by site...")
       max_dts <- cached_data %>%
@@ -137,7 +137,7 @@ server <- function(input, output, session) {
       
       #### ---- CDWR FLOW API PULL ---- ####
       home_state$set_status("cdwr_flow_api", "loading")
-      incProgress(0.5, detail = "Retrieving CDWR flow sites data...")
+      incProgress(0.15, detail = "Retrieving CDWR flow sites data...")
       print("Pulling CDWR flow data for map/flow charts...")
       
       tryCatch({
@@ -226,7 +226,7 @@ server <- function(input, output, session) {
       
       #### ---- SNOTEL API PULL ---- ####
       home_state$set_status("snotel_api", "loading")
-      incProgress(0.6, detail = "Retrieving SNOTEL snowpack data...")
+      incProgress(0.1, detail = "Retrieving SNOTEL snowpack data...")
       print("Pulling SNOTEL data...")
       tryCatch({
         clp_snotel_url <- "https://nwcc-apps.sc.egov.usda.gov/awdb/basin-plots/POR/WTEQ/assocHUC8/10190007_Cache_La_Poudre.csv"
@@ -240,7 +240,7 @@ server <- function(input, output, session) {
       home_state$set_status("snotel_api", "done")
 
       #### ---- CANYON MOUTH HISTORICAL FLOW (For TOC Model) ---- ####
-      incProgress(0.65, detail = "Retrieving Canyon Mouth historical flow data...")
+      incProgress(0.1, detail = "Retrieving Canyon Mouth historical flow data...")
       print("Pulling historical flow for Canyon Mouth (CLAFTCCO)...")
       tryCatch({
         # Find min and max date from cached data for the historical pull
@@ -264,7 +264,7 @@ server <- function(input, output, session) {
       })
 
       #### Data Aggregation  ####
-      incProgress(0.7, detail = "Processing data...")
+      incProgress(0.1, detail = "Processing data...")
       print("Aggregating API data...")
       all_data_raw <- c(hv_data, wet_data, contrail_data)
 
@@ -302,7 +302,7 @@ server <- function(input, output, session) {
                  mal_flag = NA)
       }
 
-      incProgress(0.9, detail = "Structuring and deduplicating dataset...")
+      incProgress(0.1, detail = "Structuring and deduplicating dataset...")
       print("Merging new data with cached data and deduplicating...")
       
       if(nrow(combined_data) > 0) {
@@ -319,7 +319,7 @@ server <- function(input, output, session) {
       
       print("--- DATA INITIALIZATION COMPLETE ---")
       Sys.sleep(0.5) 
-      incProgress(1, detail = "Data successfully loaded!")
+      incProgress(0.1, detail = "Data successfully loaded!")
       
       # Finalize Initialization
       loaded_data(dashboard_data)
