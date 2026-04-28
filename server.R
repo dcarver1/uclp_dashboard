@@ -606,6 +606,19 @@ server <- function(input, output, session) {
           ) %>%
           filter(!gap)
 
+        if (nrow(site_toc_data) == 0) {
+          # Return empty plot safely if no data
+          return(
+            plot_ly() %>% 
+              add_text(x = 0.5, y = 0.5, text = "No TOC data available for this date range.",
+                       textfont = list(size = 16, color = "red"),
+                       showlegend = FALSE) %>%
+              layout(
+                xaxis = list(showgrid = FALSE, showticklabels = FALSE, zeroline = FALSE, range = c(0, 1)),
+                yaxis = list(showgrid = FALSE, showticklabels = FALSE, zeroline = FALSE, range = c(0, 1))
+              ) %>% config(displayModeBar = FALSE)
+          )
+        }
 
         #get sample data
         site_samples <- water_chem%>%
@@ -711,8 +724,17 @@ server <- function(input, output, session) {
 
         # Determine y-axis limits
         if(nrow(param_bounds) > 0 && nrow(toc_plot_data) > 0) {
-          data_min <- min(site_toc_data$TOC_guess_min, site_samples$TOC,  na.rm = TRUE)
-          data_max <- max(site_toc_data$TOC_guess_max,site_samples$TOC,  na.rm = TRUE)
+          # Combine data safely
+          all_vals <- c(site_toc_data$TOC_guess_min, site_toc_data$TOC_guess_max)
+          if (nrow(site_samples) > 0) {
+            all_vals <- c(all_vals, site_samples$TOC)
+          }
+          
+          data_min <- suppressWarnings(min(all_vals, na.rm = TRUE))
+          data_max <- suppressWarnings(max(all_vals, na.rm = TRUE))
+          
+          if (is.infinite(data_min)) data_min <- param_bounds$lower
+          if (is.infinite(data_max)) data_max <- param_bounds$upper
 
           # Use parameter bounds as default, but extend if data goes outside
           y_min <- min(param_bounds$lower, data_min)

@@ -156,6 +156,17 @@ apply_toc_model <- function(sensor_data, toc_model_file_path, scaling_params_fil
   # Columns with fold predictions
   fold_cols <- grep(paste0(target_col, "_guess_fold"), colnames(summarized_data), value = TRUE)
 
+  if (nrow(summarized_data) == 0) {
+    # Provide an empty dataset with the expected structure
+    dummy_cols <- c(time_col, site_col, features, fold_cols,
+                    paste0(target_col, "_guess_min"),
+                    paste0(target_col, "_guess_max"),
+                    paste0(target_col, "_guess_ensemble"))
+    empty_df <- as_tibble(matrix(nrow = 0, ncol = length(dummy_cols)))
+    names(empty_df) <- dummy_cols
+    return(empty_df)
+  }
+
   start_DT <- min(sensor_data[[time_col]], na.rm = TRUE)
   end_DT <- max(sensor_data[[time_col]], na.rm = TRUE)
 

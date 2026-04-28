@@ -219,10 +219,14 @@ home_server <- function(id, loaded_data) {
       formatted_timestamp <- format(snapshot_timestamp, "%B %d, %Y %I:%M %p %Z")
 
       snapshot_wide <- latest_readings %>%
-        select(site, DT_round_MT, parameter, mean, units) %>%
+        select(site, parameter, mean, units) %>%
         mutate(display_val = paste0(round(mean, 2), " ", units)) %>%
         select(-mean, -units) %>%
         pivot_wider(names_from = parameter, values_from = display_val) 
+      
+      site_latest_times <- latest_readings %>%
+        group_by(site) %>%
+        summarise(DT_round_MT = max(DT_round_MT, na.rm = TRUE), .groups = "drop")
       
       target_numeric <- latest_readings %>%
         filter(parameter == target_param) %>%
@@ -238,6 +242,7 @@ home_server <- function(id, loaded_data) {
       
       map_data <- locations %>%
         inner_join(snapshot_wide, by = "site") %>%
+        inner_join(site_latest_times, by = "site") %>%
         left_join(target_numeric, by = "site") %>%
         filter(!is.na(lat), !is.na(lon))
       
