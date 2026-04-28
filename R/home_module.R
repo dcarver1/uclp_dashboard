@@ -307,9 +307,9 @@ home_server <- function(id, loaded_data) {
     # Fix disappearing map on tab return
     observeEvent(session$userData$parent_session$input$sidebar, {
       if (session$userData$parent_session$input$sidebar == "home") {
-        later::later(function() {
-          shinyjs::runjs("window.dispatchEvent(new Event('resize'));", session = session)
-        }, 100)
+        shinyjs::delay(100, {
+          shinyjs::runjs("window.dispatchEvent(new Event('resize'));")
+        })
       }
     })
     

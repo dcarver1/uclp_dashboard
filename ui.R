@@ -13,8 +13,7 @@ ui <- # secure_app( #wrap in secure_app for authentication with shiny_manager. U
         #menuItem("WQ Forecast", tabName = "forecast", icon = icon("bolt"))
         menuItem("CLP Basin Conditions", tabName = "flow_data", icon = icon("droplet")),
         #TODO: Create these tabs and migrate functions as necessary
-        menuItem("TOC Forecasts", tabName = "toc_forecasts", icon = icon("arrow-up-right-dots")),
-        menuItem("Site Map", tabName = "map", icon = icon("map"))
+        menuItem("TOC Forecasts", tabName = "toc_forecasts", icon = icon("arrow-up-right-dots"))
         #Placeholder for future functions
         #menuItem("Real-Time TOC", tabName = "toc_realtime", icon = icon("bolt")),
         #menuItem("Longitudinal Water Quality", tabName = "long_wq", icon = icon("water"))
@@ -207,15 +206,6 @@ ui <- # secure_app( #wrap in secure_app for authentication with shiny_manager. U
                 )
         ),
 
-        #### WQ Site Map Tab ####
-        tabItem(tabName = "map",
-                fluidRow(
-                  box(
-                    title = "Site Locations", status = "primary", solidHeader = TRUE, width = 12,
-                    leafletOutput("site_map", height = "600px") %>% withSpinner()
-                  )
-                )
-        ),
         #### Flow Data Tab ####
         tabItem(tabName = "flow_data",
                 layout_columns(

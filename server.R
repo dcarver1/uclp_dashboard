@@ -22,7 +22,7 @@ server <- function(input, output, session) {
   # Sidebar Gating Logic
   observe({
     # List of tabs to disable until full sync is complete
-    tabs_to_gate <- c("sensor_data", "flow_data", "toc_forecasts", "map")
+    tabs_to_gate <- c("sensor_data", "flow_data", "toc_forecasts")
     
     if (home_state$full_sync_done()) {
       for (tab in tabs_to_gate) {
@@ -42,7 +42,6 @@ server <- function(input, output, session) {
   # Reactive values for storing data
   values <- reactiveValues(
     all_data = NULL,
-    site_locations = NULL,
     flow_sites = NULL,
     clp_snotel_data = NULL,
     canyon_q = NULL,
@@ -991,46 +990,6 @@ server <- function(input, output, session) {
         })
       })
     }
-  })
-
-  #### Site Map Output ####
-  #### Get site locations from metadata ####
-  observeEvent(input$sites_select, {
-    sites_sel <- filter(site_table, site_name %in% input$sites_select )%>%
-      pull(site_code)
-    # Sample site locations
-    values$site_locations <- read_csv("data/sonde_location_metadata.csv", show_col_types = F) %>%
-      separate(col = "lat_long", into = c("lat", "lon"), sep = ",", convert = TRUE) %>%
-      st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
-      mutate(site = tolower(Site),
-             site = ifelse(site %in% c("pman", "pbr"), paste0(site, "_fc"), site))%>%
-      filter(site %in% sites_sel)%>%
-      left_join(site_table, by = c("site" = "site_code" ))
-  })
-  #### Generate site map ####
-  output$site_map <- renderLeaflet({
-    req(values$site_locations)
-
-    pal <- colorFactor(
-      palette = c("red", "blue", "green", "purple", "orange"),
-      domain = values$site_locations$watershed
-    )
-
-    leaflet(values$site_locations) %>%
-      addTiles() %>%
-      addCircleMarkers(
-        radius = 8,
-        color = ~pal(watershed),
-        fillOpacity = 0.7,
-        popup = ~paste("Site:", site_name, "<br>",
-                       "Watershed:", watershed)
-      ) %>%
-      addLegend(
-        pal = pal,
-        values = ~watershed,
-        title = "Watershed",
-        position = "bottomright"
-      )
   })
 
   #### Flow data Page ####
