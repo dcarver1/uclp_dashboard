@@ -86,23 +86,47 @@ home_server <- function(id, loaded_data) {
     
     # 0. Load Snapshot immediately for the map
     snapshot_data <- reactiveVal(NULL)
+    distributed_toc_data <- reactiveVal(NULL)
+    intake_forecast_data <- reactiveVal(NULL)
     
+    # Load initial snapshot (fastest path to map)
     observe({
       github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/data_backup.parquet"
-      
       tryCatch({
         df <- arrow::read_parquet(github_link, as_data_frame = TRUE)
-        
         latest_snapshot <- df %>%
           group_by(site, parameter) %>%
           filter(DT_round == max(DT_round, na.rm = TRUE)) %>%
           ungroup()
-        
         snapshot_data(latest_snapshot)
       }, error = function(e) {
         showNotification("Failed to load initial map snapshot.", type = "error")
       })
     })
+
+    # Sequence remaining data pulls AFTER map is visualized
+    # input$home_map_zoom is only available once the leaflet map has initialized
+    observeEvent(input$home_map_zoom, {
+      req(input$home_map_zoom)
+      
+      # 1. Pull Distributed TOC for the map markers (the "Estimated TOC" overlay)
+      # We use later to ensure we don't compete with the map's first paint
+      later::later(function() {
+        try({
+          df <- arrow::read_parquet("data/toc_forecast_distributed_backup.parquet", as_data_frame = TRUE)
+          distributed_toc_data(df)
+        }, silent = TRUE)
+      }, 0.5)
+
+      # 2. Pull Intake Forecast for the bottom plot (the heaviest/final task)
+      later::later(function() {
+        try({
+          github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/toc_forecast_intake_backup.parquet"
+          df <- arrow::read_parquet(github_link, as_data_frame = TRUE)
+          intake_forecast_data(df)
+        }, silent = TRUE)
+      }, 1.5)
+    }, once = TRUE)
     
     # 1. Track sync status
     sync_status <- reactiveValues(
@@ -134,8 +158,23 @@ home_server <- function(id, loaded_data) {
       )
     })
     
-    # Render Home Map
+    # Render Home Map (Static Base Only)
     output$home_map <- renderLeaflet({
+      leaflet(options = leafletOptions(minZoom = 8, maxZoom = 15)) %>%
+        addProviderTiles(providers$CartoDB.Positron, group = "Clean") %>%
+        addProviderTiles(providers$Esri.WorldTopoMap, group = "Topographic") %>%
+        addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
+        # Set bounds to the CLP basin area
+        setMaxBounds(lng1 = -106.1, lat1 = 40.3, lng2 = -104.9, lat2 = 41.0) %>%
+        setView(lng = -105.3, lat = 40.6, zoom = 9) %>%
+        addLayersControl(
+          baseGroups = c("Clean", "Topographic", "Satellite"),
+          options = layersControlOptions(collapsed = TRUE)
+        )
+    })
+
+    # Update Home Map Markers and Controls via Proxy
+    observe({
       target_param <- input$map_param
       
       data_to_use <- if (!is.null(loaded_data()) && nrow(loaded_data()) > 0) {
@@ -144,9 +183,7 @@ home_server <- function(id, loaded_data) {
         snapshot_data()
       }
       
-      if (is.null(data_to_use) || nrow(data_to_use) == 0) {
-        return(leaflet() %>% addTiles() %>% setView(lng = -105.3, lat = 40.6, zoom = 10))
-      }
+      req(data_to_use, nrow(data_to_use) > 0)
       
       latest_readings <- data_to_use %>%
         mutate(DT_round_MT = with_tz(DT_round, tzone = "America/Denver")) %>%
@@ -155,28 +192,28 @@ home_server <- function(id, loaded_data) {
         slice(1) %>%
         ungroup()
 
-      # Fetch TOC forecasts as the "Estimated TOC" for the map to avoid XGBoost pointer corruption issues
-      # and slow API calls during map rendering.
-      try({
-        toc_forecasts <- arrow::read_parquet("data/toc_forecast_distributed_backup.parquet", as_data_frame = TRUE)
-        latest_toc <- toc_forecasts %>%
-          filter(date_24h == Sys.Date() | date_24h == max(date_24h, na.rm = TRUE)) %>%
-          group_by(site_code) %>%
-          slice(1) %>%
-          ungroup() %>%
-          mutate(
-            site = tolower(site_code),
-            site = ifelse(site %in% c("pman", "pbr"), paste0(site, "_fc"), site)
-          ) %>%
-          select(site, mean = dist_mean_pred_toc) %>%
-          mutate(
-            parameter = "Estimated TOC",
-            units = "mg/L",
-            DT_round_MT = max(latest_readings$DT_round_MT, na.rm = TRUE)
-          )
-        
-        latest_readings <- bind_rows(latest_readings, latest_toc)
-      }, silent = TRUE)
+      # Add TOC forecasts if they are loaded
+      if (!is.null(distributed_toc_data())) {
+        try({
+          latest_toc <- distributed_toc_data() %>%
+            filter(date_24h == Sys.Date() | date_24h == max(date_24h, na.rm = TRUE)) %>%
+            group_by(site_code) %>%
+            slice(1) %>%
+            ungroup() %>%
+            mutate(
+              site = tolower(site_code),
+              site = ifelse(site %in% c("pman", "pbr"), paste0(site, "_fc"), site)
+            ) %>%
+            select(site, mean = dist_mean_pred_toc) %>%
+            mutate(
+              parameter = "Estimated TOC",
+              units = "mg/L",
+              DT_round_MT = max(latest_readings$DT_round_MT, na.rm = TRUE)
+            )
+          
+          latest_readings <- bind_rows(latest_readings, latest_toc)
+        }, silent = TRUE)
+      }
 
       snapshot_timestamp <- max(latest_readings$DT_round_MT, na.rm = TRUE)
       formatted_timestamp <- format(snapshot_timestamp, "%B %d, %Y %I:%M %p %Z")
@@ -202,14 +239,13 @@ home_server <- function(id, loaded_data) {
       map_data <- locations %>%
         inner_join(snapshot_wide, by = "site") %>%
         left_join(target_numeric, by = "site") %>%
-        filter(!is.na(lat), !is.na(lon)) %>%
-        st_as_sf(coords = c("lon", "lat"), crs = 4326)
+        filter(!is.na(lat), !is.na(lon))
       
       expected_params <- c("Temperature", "pH", "Specific Conductivity", "DO", 
                            "Turbidity", "FDOM Fluorescence", "Chl-a Fluorescence", 
                            "Depth", "Estimated TOC")
       
-      map_data$popup_content <- lapply(seq_len(nrow(map_data)), function(i) {
+      popup_content <- lapply(seq_len(nrow(map_data)), function(i) {
         row <- map_data[i, ]
         popup <- paste0(
           "<div style='min-width: 250px;'>",
@@ -229,77 +265,52 @@ home_server <- function(id, loaded_data) {
         popup <- paste0(popup, "</table></div>")
         return(HTML(popup))
       })
-      
-      # Define Color Palettes
+
+      # Define Color Palettes (moved inside observe for proxy)
       if (target_param == "pH") {
-        # pH: <6.8 or >8.8 = red, 8.6-8.3 or 7-6.8 = orange, 7-8.3 = green
-        pal <- colorBin(
-          palette = c("red", "orange", "green", "orange", "red"),
-          bins = c(0, 6.8, 7.0, 8.3, 8.8, 14),
-          domain = c(0, 14),
-          na.color = "#a9a9a9"
-        )
+        pal <- colorBin(palette = c("red", "orange", "green", "orange", "red"), bins = c(0, 6.8, 7.0, 8.3, 8.8, 14), domain = c(0, 14), na.color = "#a9a9a9")
       } else if (target_param == "Turbidity") {
-        # Turbidity: >50 = red, 50-30 = orange, <30 = green
-        pal <- colorBin(
-          palette = c("green", "orange", "red"),
-          bins = c(0, 30, 50, Inf),
-          domain = c(0, 1000),
-          na.color = "#a9a9a9"
-        )
+        pal <- colorBin(palette = c("green", "orange", "red"), bins = c(0, 30, 50, Inf), domain = c(0, 1000), na.color = "#a9a9a9")
       } else if (target_param == "Specific Conductivity") {
-        # SC: >100 = red, 100-90 = orange, <90 = green
-        pal <- colorBin(
-          palette = c("green", "orange", "red"),
-          bins = c(0, 90, 100, Inf),
-          domain = c(0, 500),
-          na.color = "#a9a9a9"
-        )
+        pal <- colorBin(palette = c("green", "orange", "red"), bins = c(0, 90, 100, Inf), domain = c(0, 500), na.color = "#a9a9a9")
       } else if (target_param == "DO") {
-        # DO: <6 = red, 6-7 = orange, >7 = green
-        pal <- colorBin(
-          palette = c("red", "orange", "green"),
-          bins = c(0, 6, 7, Inf),
-          domain = c(0, 20),
-          na.color = "#a9a9a9"
-        )
+        pal <- colorBin(palette = c("red", "orange", "green"), bins = c(0, 6, 7, Inf), domain = c(0, 20), na.color = "#a9a9a9")
       } else if (target_param == "Estimated TOC") {
-        # TOC: >8 = red, 8-4 = orange, <4 = green
-        pal <- colorBin(
-          palette = c("green", "orange", "red"),
-          bins = c(0, 4, 8, Inf),
-          domain = c(0, 20),
-          na.color = "#a9a9a9"
-        )
+        pal <- colorBin(palette = c("green", "orange", "red"), bins = c(0, 4, 8, Inf), domain = c(0, 20), na.color = "#a9a9a9")
       } else {
         pal <- colorNumeric(palette = "viridis", domain = map_data$numeric_val, na.color = "#a9a9a9")
       }
       
-      leaflet(map_data) %>%
-        setView(lng = -105.3, lat = 40.6, zoom = 9) %>%
-        addProviderTiles(providers$CartoDB.Positron, group = "Clean") %>%
-        addProviderTiles(providers$Esri.WorldTopoMap, group = "Topographic") %>%
-        addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
-        addControl(
-          html = paste0("<div style='background: rgba(255,255,255,0.9); padding: 10px 15px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.2);'>",
-                        "<h4 style='margin: 0; color: #333;'><b>Data Updated:</b><br>", formatted_timestamp, "</h4></div>"),
-          position = "topright"
-        ) %>%
+      leafletProxy("home_map") %>%
+        clearMarkers() %>%
+        clearControls() %>%
         addCircleMarkers(
+          data = map_data,
+          lng = ~lon, lat = ~lat,
           radius = 10, color = "#333333", weight = 1.5,
           fillColor = ~pal(numeric_val), fillOpacity = 0.9,
-          popup = ~popup_content, label = ~Site_Name,
+          popup = popup_content, label = ~Site_Name,
           labelOptions = labelOptions(textsize = "14px")
         ) %>%
         addLegend(
           position = "bottomright", pal = pal,
-          values = ~numeric_val[!is.na(numeric_val)], 
+          values = map_data$numeric_val[!is.na(map_data$numeric_val)], 
           title = paste(target_param), opacity = 1
         ) %>%
-        addLayersControl(
-          baseGroups = c("Clean", "Topographic", "Satellite"),
-          options = layersControlOptions(collapsed = TRUE)
+        addControl(
+          html = paste0("<div style='background: rgba(255,255,255,0.9); padding: 10px 15px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.2);'>",
+                        "<h4 style='margin: 0; color: #333;'><b>Data Updated:</b><br>", formatted_timestamp, "</h4></div>"),
+          position = "topright"
         )
+    })
+
+    # Fix disappearing map on tab return
+    observeEvent(session$userData$parent_session$input$sidebar, {
+      if (session$userData$parent_session$input$sidebar == "home") {
+        later::later(function() {
+          shinyjs::runjs("window.dispatchEvent(new Event('resize'));", session = session)
+        }, 100)
+      }
     })
     
     # Handle "View Trends" from popup
@@ -312,11 +323,9 @@ home_server <- function(id, loaded_data) {
     
     # Render Intake TOC Forecast Plot
     output$intake_toc_forecast_plot <- renderPlotly({
-      req(input$home_map_zoom) # Defer plot processing until the leaflet map has initialized and rendered
+      req(intake_forecast_data())
       
-      intake_forecast_github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/toc_forecast_intake_backup.parquet"
-      
-      intake_cached_data <- arrow::read_parquet(intake_forecast_github_link, as_data_frame = TRUE) %>%
+      intake_cached_data <- intake_forecast_data() %>%
         filter(date == max(date, na.rm = TRUE)) %>% # Get the most recent forecast date
         mutate(across(contains("intake_q_swe_pred"), ~ round(.x, 2))) %>%
         filter(date_24h <= Sys.Date() + days(10)) #Limit to the next 10 days

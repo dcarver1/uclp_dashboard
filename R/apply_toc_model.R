@@ -55,7 +55,18 @@ apply_toc_model <- function(sensor_data, toc_model_file_path, scaling_params_fil
                             time_col = "DT_round", site_col = "site", parameter_col = "parameter", value_col = "mean", canyon_q_data = NULL){
 
   #Load TOC model
-  toc_models <- read_ext(toc_model_file_path)
+  toc_models <- readRDS(toc_model_file_path)
+  
+  # Ensure all boosters are valid (fixes pointer corruption when loading RDS)
+  for (i in seq_along(toc_models)) {
+    if (inherits(toc_models[[i]], "xgb.Booster")) {
+      # Use triple colon to access internal if not exported, or try the native complete
+      toc_models[[i]] <- tryCatch({
+        xgboost:::xgb.Booster.complete(toc_models[[i]])
+      }, error = function(e) toc_models[[i]])
+    }
+  }
+
   # Define features for prediction (same order as training)
   features <- toc_models[[1]]$feature_names # extract feature names from the first model (assuming all models have the same features)
   # Define target variable name
