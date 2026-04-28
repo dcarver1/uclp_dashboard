@@ -205,22 +205,26 @@ home_server <- function(id, loaded_data) {
         filter(!is.na(lat), !is.na(lon)) %>%
         st_as_sf(coords = c("lon", "lat"), crs = 4326)
       
-      param_cols <- setdiff(names(snapshot_wide), c("site", "DT_round_MT", "Site_Name"))
+      expected_params <- c("Temperature", "pH", "Specific Conductivity", "DO", 
+                           "Turbidity", "FDOM Fluorescence", "Chl-a Fluorescence", 
+                           "Depth", "Estimated TOC")
       
       map_data$popup_content <- lapply(seq_len(nrow(map_data)), function(i) {
         row <- map_data[i, ]
         popup <- paste0(
-          "<div style='min-width: 200px;'>",
+          "<div style='min-width: 250px;'>",
           "<b>Site:</b> ", row$Site_Name, "<br>",
-          "<b>Latest:</b> ", format(row$DT_round_MT, "%Y-%m-%d %H:%M"), "<br><hr>",
-          "<table style='width: 100%;'>"
+          "<b>Latest:</b> ", format(row$DT_round_MT, "%Y-%m-%d %H:%M"), "<br><hr style='margin: 8px 0;'>",
+          "<table style='width: 100%; font-size: 0.95em;'>"
         )
-        for (param in param_cols) {
-          val <- row[[param]]
-          if (!is.na(val) && val != "NA NA") {
-            style <- if(param == target_param) "style='font-weight: bold; color: #E70870;'" else ""
-            popup <- paste0(popup, "<tr><td ", style, ">", param, ":</td><td ", style, " align='right'>", val, "</td></tr>")
-          }
+        for (param in expected_params) {
+          val <- if (param %in% names(row)) row[[param]] else NA
+          is_missing <- is.na(val) || val == "NA NA" || is.null(val) || val == "NA"
+          
+          display_val <- if(is_missing) "<span style='color: #999; font-style: italic;'>No Data</span>" else val
+          style <- if(param == target_param) "style='font-weight: bold; color: #E70870;'" else ""
+          
+          popup <- paste0(popup, "<tr><td ", style, ">", param, "</td><td ", style, " align='right'>", display_val, "</td></tr>")
         }
         popup <- paste0(popup, "</table></div>")
         return(HTML(popup))
