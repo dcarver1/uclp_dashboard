@@ -251,7 +251,7 @@ server <- function(input, output, session) {
           api_key = cdwr_api_key,
           timescale = "hour"
         ) %>%
-          mutate(date = as_date(datetime)) %>%
+          mutate(date = as_date(datetime, tz = "America/Denver")) %>%
           summarize(canyon_mouth_daily_flow_cfs = mean(meas_value, na.rm = TRUE), .by = date)
         
         values$canyon_q <- canyon_q_res
@@ -361,7 +361,8 @@ server <- function(input, output, session) {
         # apply binomial filter to turbidity and Chl-a
         apply_low_pass_binomial_filter(df = .,  value_col = "mean_filled", new_value_col = "mean_smoothed", dt_col = "DT_round_MT")%>%
         # apply timestep median to reduce noise
-        apply_timestep_median(df = ., value_col = "mean_smoothed", new_value_col = "timestep_median", timestep = input$data_timestep, dt_col = "DT_round_MT")%>%
+        mutate(DT_round_MT = as.POSIXct(DT_round_MT)) %>%
+        apply_timestep_median(df = ., value_col = "mean_smoothed", new_value_col = "timestep_median", timestep = input$data_timestep, dt_col = "DT_round_MT") %>%
         #trim down dataset and rename columns
         select(DT_round_MT = DT_group, site, parameter, mean = timestep_median)%>%
         #remove duplicates
@@ -370,8 +371,9 @@ server <- function(input, output, session) {
     } else {
       # If QA/QC filter is not applied, just return base filtered data with timestep median applied
       apply_interpolation_missing_data(df = base_filtered_data(),  value_col = "mean", dt_col = "DT_round_MT", method = "linear", max_gap = 4)%>%
-        #take timestep median
-        apply_timestep_median(df = ., value_col = "mean_filled", new_value_col = "timestep_median", timestep = input$data_timestep, dt_col = "DT_round_MT")%>%
+        # take timestep median
+        mutate(DT_round_MT = as.POSIXct(DT_round_MT)) %>%
+        apply_timestep_median(df = ., value_col = "mean_filled", new_value_col = "timestep_median", timestep = input$data_timestep, dt_col = "DT_round_MT") %>%
         #trim down dataset and rename columns
         select(DT_round_MT = DT_group, site, parameter, mean = timestep_median)%>%
         #remove duplicates
@@ -516,7 +518,7 @@ server <- function(input, output, session) {
       filter(!str_detect( site, "_fc")) #FC sondes will not have correct parameters so we can omit them entirely
 
     # Define required parameters
-    required_params <- c("FDOM Fluorescence", "Temperature", "Specific Conductivity","Turbidity")
+    required_params <- c("FDOM Fluorescence", "Temperature", "Specific Conductivity", "Turbidity", "Chl-a Fluorescence")
     # Check if all required parameters are present
     available_params <- unique(input_data$parameter)
     missing_params <- setdiff(required_params, available_params)

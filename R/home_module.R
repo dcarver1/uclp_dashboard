@@ -170,7 +170,11 @@ home_server <- function(id, loaded_data) {
               parameter = "Estimated TOC",
               units = "mg/L",
               DT_round_MT = with_tz(DT_round, tzone = "America/Denver")
-            )
+            ) %>%
+            group_by(site) %>%
+            filter(DT_round_MT == max(DT_round_MT, na.rm = TRUE)) %>%
+            slice(1) %>%
+            ungroup()
         } else {
           NULL
         }

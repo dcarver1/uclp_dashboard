@@ -60,10 +60,15 @@ apply_toc_model <- function(sensor_data, toc_model_file_path, scaling_params_fil
   # Ensure all boosters are valid (fixes pointer corruption when loading RDS)
   for (i in seq_along(toc_models)) {
     if (inherits(toc_models[[i]], "xgb.Booster")) {
-      # Use triple colon to access internal if not exported, or try the native complete
       toc_models[[i]] <- tryCatch({
-        xgboost:::xgb.Booster.complete(toc_models[[i]])
-      }, error = function(e) toc_models[[i]])
+        # Use xgb.save.raw and xgb.load.raw to ensure the booster is properly initialized
+        # in the current session.
+        raw <- xgboost::xgb.save.raw(toc_models[[i]])
+        xgboost::xgb.load.raw(raw)
+      }, error = function(e) {
+        # Fallback if completion fails
+        toc_models[[i]]
+      })
     }
   }
 
@@ -83,25 +88,32 @@ apply_toc_model <- function(sensor_data, toc_model_file_path, scaling_params_fil
     apply_fdom_corrections(fdom_col = "FDOM Fluorescence", temp_col = "Temperature", turb_col = "Turbidity",
                            fdom_temp_col = "FDOMc", fdom_turb_col = "FDOM_turb_corr", fdom_final_col = "FDOM_final_corr")%>%
     mutate(fdom_x_sc = FDOMc * `Specific Conductivity`,
-           fdom_x_turb = FDOMc * Turbidity)%>%
+           fdom_x_turb = FDOMc * Turbidity) %>%
     #fix site names to match model
     select(!!sym(time_col), !!sym(site_col),
-           any_of(features))%>%
-    mutate(date = as_date(!!sym(time_col)))
+           any_of(features))
 
-  if (is.null(canyon_q_data)) {
-    # Fallback if not provided
+  # Ensure canyon_q_data covers the required range
+  start_date_req <- as_date(min(processed_sensor_data[[time_col]], na.rm = TRUE), tz = "America/Denver")
+  end_date_req <- as_date(max(processed_sensor_data[[time_col]], na.rm = TRUE), tz = "America/Denver")
+
+  if (is.null(canyon_q_data) || 
+      min(canyon_q_data$date, na.rm = TRUE) > start_date_req || 
+      max(canyon_q_data$date, na.rm = TRUE) < end_date_req) {
+    
+    # Fetch or supplement missing flow data
     canyon_q_data <- cdssr::get_telemetry_ts(abbrev = "CLAFTCCO",
-                                          start_date = min(processed_sensor_data[[time_col]], na.rm = TRUE) - days(1),
-                                          end_date = max(processed_sensor_data[[time_col]], na.rm = TRUE) + days(1),
+                                          start_date = start_date_req - days(1),
+                                          end_date = end_date_req + days(1),
                                           api_key = cdwr_api_key,
-                                        timescale = "hour")%>%
-      mutate(date = as_date(datetime))%>%
+                                        timescale = "hour") %>%
+      mutate(date = as_date(datetime, tz = "America/Denver")) %>%
       summarize(canyon_mouth_daily_flow_cfs = mean(meas_value, na.rm = TRUE), .by = date)
   }
 
-  model_input_data <-  processed_sensor_data %>%
-    left_join(canyon_q_data, by = "date")%>%
+  model_input_data <- processed_sensor_data %>%
+    mutate(date = as_date(!!sym(time_col), tz = "America/Denver")) %>%
+    left_join(canyon_q_data, by = "date") %>%
     na.omit() # remove any rows missing needed values
 
   # Load saved scaling parameters and model

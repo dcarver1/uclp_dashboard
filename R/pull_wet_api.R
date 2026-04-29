@@ -125,11 +125,15 @@ pull_wet_api <- function(target_site, start_datetime, end_datetime = Sys.time())
         # Build DT
         dt <- data.table::data.table(
           site = target_site,
-          DT_round_MT = as.POSIXct(paste(cols[[1]], cols[[2]]), format="%m/%d/%Y %H:%M:%S", tz="America/Denver"),
+          # Use tryCatch or more robust parsing to avoid NA coercion warnings on malformed lines
+          DT_round_MT = tryCatch({
+            as.POSIXct(paste(cols[[1]], cols[[2]]), format="%m/%d/%Y %H:%M:%S", tz="America/Denver")
+          }, error = function(e) as.POSIXct(NA)),
           parameter = urls_dt$data_type[idx],
           value = as.numeric(cols[[3]]),
           units = urls_dt$parameter_units[idx]
-        )
+        ) %>%
+          dplyr::filter(!is.na(DT_round_MT))
         return(dt)
       }, error = function(e) NULL)
     }
