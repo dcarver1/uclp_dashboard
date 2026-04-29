@@ -91,9 +91,8 @@ home_server <- function(id, loaded_data) {
     
     # Load initial snapshot (fastest path to map)
     observe({
-      github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/data_backup.parquet"
       tryCatch({
-        df <- arrow::read_parquet(github_link, as_data_frame = TRUE)
+        df <- arrow::read_parquet(snapshot_url, as_data_frame = TRUE)
         latest_snapshot <- df %>%
           group_by(site, parameter) %>%
           filter(DT_round == max(DT_round, na.rm = TRUE)) %>%
@@ -105,24 +104,21 @@ home_server <- function(id, loaded_data) {
     })
 
     # Sequence remaining data pulls AFTER map is visualized
-    # input$home_map_zoom is only available once the leaflet map has initialized
     observeEvent(input$home_map_zoom, {
       req(input$home_map_zoom)
       
       # 1. Pull Distributed TOC for the map markers (the "Estimated TOC" overlay)
-      # We use later to ensure we don't compete with the map's first paint
       later::later(function() {
         try({
-          df <- arrow::read_parquet("data/toc_forecast_distributed_backup.parquet", as_data_frame = TRUE)
+          df <- arrow::read_parquet(distributed_forecast_url, as_data_frame = TRUE)
           distributed_toc_data(df)
         }, silent = TRUE)
       }, 0.5)
 
-      # 2. Pull Intake Forecast for the bottom plot (the heaviest/final task)
+      # 2. Pull Intake Forecast for the bottom plot
       later::later(function() {
         try({
-          github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/toc_forecast_intake_backup.parquet"
-          df <- arrow::read_parquet(github_link, as_data_frame = TRUE)
+          df <- arrow::read_parquet(intake_forecast_url, as_data_frame = TRUE)
           intake_forecast_data(df)
         }, silent = TRUE)
       }, 1.5)
@@ -232,15 +228,8 @@ home_server <- function(id, loaded_data) {
         filter(parameter == target_param) %>%
         select(site, numeric_val = mean)
       
-      locations <- read_csv("data/sonde_location_metadata.csv", show_col_types = FALSE) %>%
-        separate(col = "lat_long", into = c("lat", "lon"), sep = ",", convert = TRUE) %>%
-        mutate(
-          site = tolower(Site),
-          site = ifelse(site %in% c("pman", "pbr"), paste0(site, "_fc"), site)
-        ) %>%
-        select(site, Site_Name = Site, lat, lon, watershed)
-      
-      map_data <- locations %>%
+      # Use sonde_locations from global.R
+      map_data <- sonde_locations %>%
         inner_join(snapshot_wide, by = "site") %>%
         inner_join(site_latest_times, by = "site") %>%
         left_join(target_numeric, by = "site") %>%
@@ -267,7 +256,11 @@ home_server <- function(id, loaded_data) {
           
           popup <- paste0(popup, "<tr><td ", style, ">", param, "</td><td ", style, " align='right'>", display_val, "</td></tr>")
         }
-        popup <- paste0(popup, "</table></div>")
+        # Add a Link to Trends
+        popup <- paste0(popup, "</table>",
+                        "<div style='text-align: center; margin-top: 10px;'>",
+                        "<button class='btn btn-xs btn-primary' onclick='Shiny.setInputValue(\"", ns("view_trends"), "\", \"", row$site, "\", {priority: \"event\"})'>View Trends</button>",
+                        "</div></div>")
         return(HTML(popup))
       })
 
@@ -320,84 +313,25 @@ home_server <- function(id, loaded_data) {
     
     # Handle "View Trends" from popup
     observeEvent(input$view_trends, {
-      # This needs to interact with the parent session to change tabs
-      # We use a custom message or just updateTabItems if we can access the parent
+      req(input$view_trends)
+      
+      # Switch to sensor data tab
       updateTabItems(session = session$userData$parent_session, "sidebar", "sensor_data")
-      # Also pre-select the site if possible - this requires more integration with the sensor_data tab
+      
+      # Map the site code back to the display name for the picker
+      site_display_name <- site_table %>%
+        filter(site_code == input$view_trends) %>%
+        pull(site_name)
+      
+      if (length(site_display_name) > 0) {
+        updatePickerInput(session = session$userData$parent_session, "sites_select", selected = site_display_name)
+      }
     })
     
     # Render Intake TOC Forecast Plot
     output$intake_toc_forecast_plot <- renderPlotly({
       req(intake_forecast_data())
-      
-      intake_cached_data <- intake_forecast_data() %>%
-        filter(date == max(date, na.rm = TRUE)) %>% # Get the most recent forecast date
-        mutate(across(contains("intake_q_swe_pred"), ~ round(.x, 2))) %>%
-        filter(date_24h <= Sys.Date() + days(10)) #Limit to the next 10 days
-      
-      # Extract the forecast creation date for the title
-      forecast_date <- unique(intake_cached_data$date)[1]
-      
-      # Define RGBA colors
-      col_red    <- 'rgba(255, 0, 0, 0.2)'
-      col_orange <- 'rgba(255, 165, 0, 0.2)'
-      col_green  <- 'rgba(0, 255, 0, 0.2)'
-      col_blue   <- 'rgba(0, 0, 255, 0.2)'
-      
-      # Reference lines
-      ref_lines <- c(2, 4, 8)
-      hline_shapes <- lapply(ref_lines, function(y_val) {
-        list(
-          type = "line", x0 = 0, x1 = 1, xref = "paper", y0 = y_val, y1 = y_val, yref = "y",
-          line = list(color = "rgba(0, 0, 0, 0.4)", width = 1.5, dash = "dash")
-        )
-      })
-      
-      # Create plot
-      p <- plot_ly(intake_cached_data, x = ~date_24h) %>%
-        add_ribbons(ymin = ~intake_q_swe_pred_q75, ymax = ~intake_q_swe_pred_max,
-                    fillcolor = col_red, line = list(color = 'transparent'),
-                    showlegend = FALSE, hoverinfo = "none") %>%
-        add_ribbons(ymin = ~intake_q_swe_pred, ymax = ~intake_q_swe_pred_q75,
-                    fillcolor = col_orange, line = list(color = 'transparent'),
-                    showlegend = FALSE, hoverinfo = "none") %>%
-        add_ribbons(ymin = ~intake_q_swe_pred_q25, ymax = ~intake_q_swe_pred,
-                    fillcolor = col_green, line = list(color = 'transparent'),
-                    showlegend = FALSE, hoverinfo = "none") %>%
-        add_ribbons(ymin = ~intake_q_swe_pred_min, ymax = ~intake_q_swe_pred_q25,
-                    fillcolor = col_blue, line = list(color = 'transparent'),
-                    showlegend = FALSE, hoverinfo = "none") %>%
-        add_lines(
-          y = ~intake_q_swe_pred,
-          line = list(color = "black", width = 2.5),
-          name = "Median Prediction",
-          text = ~paste0(
-            "Max: ", intake_q_swe_pred_max, " mg/L<br>",
-            "Q75: ", intake_q_swe_pred_q75, " mg/L<br>",
-            "Median: ", intake_q_swe_pred, " mg/L<br>",
-            "Q25: ", intake_q_swe_pred_q25, " mg/L<br>",
-            "Min: ", intake_q_swe_pred_min, " mg/L"
-          ),
-          hovertemplate = "%{text}<extra></extra>"
-        ) %>%
-        layout(
-          title = list(
-            text = paste0("Forecast Created: ", forecast_date, " 3:00 AM MT"),
-            x = 0.5,
-            y = 0.95
-          ),
-          xaxis = list(title = "Date"),
-          yaxis = list(
-            title = "Predicted Intake TOC (mg/L)",
-            range = c(min(intake_cached_data$intake_q_swe_pred_min) - 0.2, max(intake_cached_data$intake_q_swe_pred_max) + 0.2)
-          ),
-          shapes = hline_shapes,
-          hovermode = "x unified",
-          legend = list(orientation = 'h', y = -0.2),
-          margin = list(t = 30, b = 30, l = 50, r = 20)
-        )
-      
-      p %>% config(displayModeBar = FALSE)
+      plot_toc_forecast(intake_forecast_data(), title_suffix = "System-Wide Intake Forecast")
     })
     
     return(list(

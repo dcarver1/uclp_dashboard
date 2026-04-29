@@ -72,11 +72,10 @@ server <- function(input, output, session) {
       
       print("--- STARTING DATA INITIALIZATION ---")
       incProgress(0.1, detail = "Locating cached data files...")
-      github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/data_backup.parquet"
       
-      print(paste("Downloading cached data from:", github_link))
+      print(paste("Downloading cached data from:", snapshot_url))
       incProgress(0.1, detail = "Importing historical parquet data...")
-      cached_data <- arrow::read_parquet(github_link, as_data_frame = TRUE)
+      cached_data <- arrow::read_parquet(snapshot_url, as_data_frame = TRUE)
       print(paste("Cached data loaded successfully. Total records:", nrow(cached_data)))
       
       #### ---- WET API PULL ---- ####
@@ -831,85 +830,15 @@ server <- function(input, output, session) {
   #### TOC Forecast Plots ####
   # Generate Intake Forecast Plot
   output$intake_toc_forecast_plot <- renderPlotly({
-    intake_forecast_github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/toc_forecast_intake_backup.parquet"
-
-    intake_cached_data <- arrow::read_parquet(intake_forecast_github_link, as_data_frame = TRUE)%>%
+    intake_cached_data <- arrow::read_parquet(intake_forecast_url, as_data_frame = TRUE)%>%
       filter(date == max(date, na.rm = TRUE)) %>% # Get the most recent forecast date
       mutate(across(contains("intake_q_swe_pred"), ~ round(.x, 2)))%>%
       filter(date_24h <= Sys.Date() + days(10)) #Limit to the next 10 days
 
-    # Extract the forecast creation date for the title
-    forecast_date <- unique(intake_cached_data$date)[1]
-    site_name <- "Fort Collins Poudre River Intake"
-
-    # Define RGBA colors
-    col_red    <- 'rgba(255, 0, 0, 0.2)'
-    col_orange <- 'rgba(255, 165, 0, 0.2)'
-    col_green  <- 'rgba(0, 255, 0, 0.2)'
-    col_blue   <- 'rgba(0, 0, 255, 0.2)'
-
-    # Reference lines
-    ref_lines <- c(2, 4, 8)
-    hline_shapes <- lapply(ref_lines, function(y_val) {
-      list(
-        type = "line", x0 = 0, x1 = 1, xref = "paper", y0 = y_val, y1 = y_val, yref = "y",
-        line = list(color = "rgba(0, 0, 0, 0.4)", width = 1.5, dash = "dash")
-      )
-    })
-
-    # Create plot
-    p <- plot_ly(intake_cached_data, x = ~date_24h) %>%
-      # Ribbons: showlegend = FALSE and hoverinfo = "none" to hide them from UI
-      add_ribbons(ymin = ~intake_q_swe_pred_q75, ymax = ~intake_q_swe_pred_max,
-                  fillcolor = col_red, line = list(color = 'transparent'),
-                  showlegend = FALSE, hoverinfo = "none") %>%
-      add_ribbons(ymin = ~intake_q_swe_pred, ymax = ~intake_q_swe_pred_q75,
-                  fillcolor = col_orange, line = list(color = 'transparent'),
-                  showlegend = FALSE, hoverinfo = "none") %>%
-      add_ribbons(ymin = ~intake_q_swe_pred_q25, ymax = ~intake_q_swe_pred,
-                  fillcolor = col_green, line = list(color = 'transparent'),
-                  showlegend = FALSE, hoverinfo = "none") %>%
-      add_ribbons(ymin = ~intake_q_swe_pred_min, ymax = ~intake_q_swe_pred_q25,
-                  fillcolor = col_blue, line = list(color = 'transparent'),
-                  showlegend = FALSE, hoverinfo = "none") %>%
-
-      # BLACK MEDIAN LINE: This carries the hover info for ALL quantiles
-      add_lines(
-        y = ~intake_q_swe_pred,
-        line = list(color = "black", width = 2.5),
-        name = "Median Prediction",
-        text = ~paste0(
-          "Max: ", intake_q_swe_pred_max, " mg/L<br>",
-          "Q75: ", intake_q_swe_pred_q75, " mg/L<br>",
-          "Median: ", intake_q_swe_pred, " mg/L<br>",
-          "Q25: ", intake_q_swe_pred_q25, " mg/L<br>",
-          "Min: ", intake_q_swe_pred_min, " mg/L"
-        ),
-        hovertemplate = "%{text}<extra></extra>"
-      ) %>%
-
-      layout(
-        title = list(
-          text = paste0("Fort Collins Poudre River Intake TOC Forecast",
-                        "<br><sup>Forecast Created: ", forecast_date, " 3:00 AM </sup>"),
-          x = 0.1
-        ),
-        xaxis = list(title = "Date"),
-        yaxis = list(
-          title = "Predicted Intake TOC (mg/L)",
-          range = c(min( intake_cached_data$intake_q_swe_pred_min) - 0.2, max( intake_cached_data$intake_q_swe_pred_max) + 0.2)
-
-        ),
-        shapes = hline_shapes,
-        hovermode = "x unified",
-        # Legend now only shows the Median Line
-        legend = list(orientation = 'h', y = -0.2)
-      )
-
-    p
+    plot_toc_forecast(intake_cached_data, title_suffix = "Fort Collins Poudre River Intake TOC Forecast")
   })
 
-  # Generate Intake Forecast Plot
+  # Generate Distributed Forecast Plots
   output$dist_toc_forecast_plots <- renderUI({
     req(input$toc_forecast_sites)
 
@@ -933,29 +862,20 @@ server <- function(input, output, session) {
   })
 
   # Create Distributed TOC Forecast Plots
-
   observe({
     # Ensure input is available
     req(input$toc_forecast_sites)
 
-    distributed_forecast_github_link <- "https://github.com/rossyndicate/uclp_dashboard/raw/main/data/toc_forecast_distributed_backup.parquet"
-
     # Load and filter
-    dist_cached_data <- arrow::read_parquet(distributed_forecast_github_link, as_data_frame = TRUE) %>%
+    dist_cached_data <- arrow::read_parquet(distributed_forecast_url, as_data_frame = TRUE) %>%
       mutate(across(contains("pred_toc"), ~ round(.x, 2))) %>%
       filter(date == max(date, na.rm = TRUE)) %>% # Get the most recent forecast date
-      filter(date_24h <= Sys.Date() + days(10))%>%
-      filter(site_name %in% input$toc_forecast_sites) # Filter by user selection
+      filter(date_24h <= Sys.Date() + days(10))
 
     sites <- unique(dist_cached_data$site_name)
-    forecast_date <- unique(dist_cached_data$date)[1]
+    selected_sites <- sites[sites %in% input$toc_forecast_sites]
 
-    col_red    <- 'rgba(255, 0, 0, 0.2)'
-    col_orange <- 'rgba(255, 165, 0, 0.2)'
-    col_green  <- 'rgba(0, 255, 0, 0.2)'
-    col_blue   <- 'rgba(0, 0, 255, 0.2)'
-
-    for (site in sites) {
+    for (site in selected_sites) {
       local({
         current_site <- site
         clean_site_id <- gsub("[^[:alnum:]]", "_", current_site)
@@ -964,51 +884,7 @@ server <- function(input, output, session) {
         site_data <- dist_cached_data %>% filter(site_name == current_site)
 
         output[[plot_id]] <- renderPlotly({
-          plot_ly(site_data, x = ~date_24h) %>%
-            add_ribbons(ymin = ~dist_q75_pred_toc, ymax = ~dist_max_pred_toc,
-                        fillcolor = col_red, line = list(color = 'transparent'),
-                        showlegend = FALSE, hoverinfo = "none") %>%
-            add_ribbons(ymin = ~dist_mean_pred_toc, ymax = ~dist_q75_pred_toc,
-                        fillcolor = col_orange, line = list(color = 'transparent'),
-                        showlegend = FALSE, hoverinfo = "none") %>%
-            add_ribbons(ymin = ~dist_q25_pred_toc, ymax = ~dist_mean_pred_toc,
-                        fillcolor = col_green, line = list(color = 'transparent'),
-                        showlegend = FALSE, hoverinfo = "none") %>%
-            add_ribbons(ymin = ~dist_min_pred_toc, ymax = ~dist_q25_pred_toc,
-                        fillcolor = col_blue, line = list(color = 'transparent'),
-                        showlegend = FALSE, hoverinfo = "none") %>%
-            add_lines(
-              y = ~dist_mean_pred_toc,
-              line = list(color = "black", width = 2),
-              name = "Forecast",
-              text = ~paste0(
-                "<b>", current_site, "</b><br>",
-                "Max: ", dist_max_pred_toc, " mg/L<br>",
-                "Q75: ", dist_q75_pred_toc, " mg/L<br>",
-                "Mean: ", dist_mean_pred_toc, " mg/L<br>",
-                "Q25: ", dist_q25_pred_toc, " mg/L<br>",
-                "Min: ", dist_min_pred_toc, " mg/L"
-              ),
-              hovertemplate = "%{text}<extra></extra>"
-            ) %>%
-            layout(
-              yaxis = list(
-                title = "TOC (mg/L)",
-                range = c(min(site_data$dist_min_pred_toc) - 0.2, max(site_data$dist_max_pred_toc) + 0.2)
-              ),
-              xaxis = list(title = "Date"),
-              shapes = list(
-                list(type = "line", x0 = 0, x1 = 1, xref = "paper", y0 = 2, y1 = 2,
-                     line = list(dash = "dash", color = "gray", width = 1)),
-                list(type = "line", x0 = 0, x1 = 1, xref = "paper", y0 = 4, y1 = 4,
-                     line = list(dash = "dash", color = "gray", width = 1)),
-                list(type = "line", x0 = 0, x1 = 1, xref = "paper", y0 = 8, y1 = 8,
-                     line = list(dash = "dash", color = "gray", width = 1))
-              ),
-              hovermode = "x unified",
-              showlegend = FALSE,
-              margin = list(t = 30)
-            )
+          plot_toc_forecast(site_data, title_suffix = paste0("Distributed Forecast: ", current_site))
         })
       })
     }
