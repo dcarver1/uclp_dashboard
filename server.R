@@ -335,12 +335,16 @@ server <- function(input, output, session) {
 
     sites_sel <- filter(site_table, site_name %in% input$sites_select) %>% pull(site_code)
 
+    # Ensure we include required parameters for TOC model even if not selected for other plots
+    required_toc_params <- c("FDOM Fluorescence", "Temperature", "Specific Conductivity", "Turbidity", "Chl-a Fluorescence")
+    all_params <- unique(c(input$parameters_select, required_toc_params))
+
     loaded_data() %>%
       mutate(DT_round_MT = with_tz(DT_round, tzone = "America/Denver")) %>%
       filter(
         between(DT_round_MT, start_DT, end_DT),
         site %in% sites_sel,
-        parameter %in% input$parameters_select
+        parameter %in% all_params
       ) %>%
       mutate(
         mean = ifelse(!is.na(mal_flag), NA, mean),
@@ -361,23 +365,23 @@ server <- function(input, output, session) {
         # apply binomial filter to turbidity and Chl-a
         apply_low_pass_binomial_filter(df = .,  value_col = "mean_filled", new_value_col = "mean_smoothed", dt_col = "DT_round_MT")%>%
         # apply timestep median to reduce noise
-        mutate(DT_round_MT = as.POSIXct(DT_round_MT)) %>%
-        apply_timestep_median(df = ., value_col = "mean_smoothed", new_value_col = "timestep_median", timestep = input$data_timestep, dt_col = "DT_round_MT") %>%
+        mutate(DT_round = as.POSIXct(DT_round_MT)) %>%
+        apply_timestep_median(df = ., value_col = "mean_smoothed", new_value_col = "timestep_median", timestep = input$data_timestep, dt_col = "DT_round") %>%
         #trim down dataset and rename columns
-        select(DT_round_MT = DT_group, site, parameter, mean = timestep_median)%>%
+        select(DT_round = DT_group, site, parameter, mean = timestep_median)%>%
         #remove duplicates
-        distinct(site, parameter, mean, DT_round_MT, .keep_all = TRUE)
+        distinct(site, parameter, mean, DT_round, .keep_all = TRUE)
 
     } else {
       # If QA/QC filter is not applied, just return base filtered data with timestep median applied
       apply_interpolation_missing_data(df = base_filtered_data(),  value_col = "mean", dt_col = "DT_round_MT", method = "linear", max_gap = 4)%>%
         # take timestep median
-        mutate(DT_round_MT = as.POSIXct(DT_round_MT)) %>%
-        apply_timestep_median(df = ., value_col = "mean_filled", new_value_col = "timestep_median", timestep = input$data_timestep, dt_col = "DT_round_MT") %>%
+        mutate(DT_round = as.POSIXct(DT_round_MT)) %>%
+        apply_timestep_median(df = ., value_col = "mean_filled", new_value_col = "timestep_median", timestep = input$data_timestep, dt_col = "DT_round") %>%
         #trim down dataset and rename columns
-        select(DT_round_MT = DT_group, site, parameter, mean = timestep_median)%>%
+        select(DT_round = DT_group, site, parameter, mean = timestep_median)%>%
         #remove duplicates
-        distinct(site, parameter, mean, DT_round_MT, .keep_all = TRUE)
+        distinct(site, parameter, mean, DT_round, .keep_all = TRUE)
     }
   })
 
@@ -483,7 +487,7 @@ server <- function(input, output, session) {
 
         # Create the plotly plot
         p <- plot_ly(plot_data,
-                     x = ~DT_round_MT,
+                     x = ~DT_round,
                      y = ~mean,
                      type = "scatter",
                      color = ~site,
@@ -575,7 +579,7 @@ server <- function(input, output, session) {
                                      scaling_params_file_path = "data/models/scaling_params_toc_20260224.parquet",
                                      #summarizing model input results to user selected timestep (15 min -> 1 day)
                                      summarize_interval = input$data_timestep,
-                                     time_col = "DT_round_MT",
+                                     time_col = "DT_round",
                                      value_col = "mean",
                                      canyon_q_data = values$canyon_q) %>%
       left_join(site_table, by = c("site" = "site_code"))%>%
@@ -599,7 +603,7 @@ server <- function(input, output, session) {
       output[[paste0("toc_plot_", site_cd)]] <- renderPlotly({
         site_toc_data <- toc_plot_data %>%
           filter(site_name == site_cd)%>%
-          arrange(DT_round_MT) %>%
+          arrange(DT_round) %>%
           mutate(
             gap = is.na(TOC_guess_min) | is.na(TOC_guess_max) | is.na(.data[[plot_param]]),
             gid = cumsum(lag(gap, default = TRUE) != gap)
@@ -625,7 +629,7 @@ server <- function(input, output, session) {
           left_join(site_table, by = c("site_code"))%>%
           filter(site_name == site_cd & !is.na(TOC))%>%
           mutate(DT_round = with_tz(round_date(DT_sample, unit = "15 minutes"), tzone = "America/Denver"))%>%
-          filter(between(DT_round, min(site_toc_data$DT_round_MT) - days(1), max(site_toc_data$DT_round_MT) + days(1)))
+          filter(between(DT_round, min(site_toc_data$DT_round) - days(1), max(site_toc_data$DT_round) + days(1)))
 
 
         p <- plot_ly() %>%
@@ -660,7 +664,7 @@ server <- function(input, output, session) {
             p <- p %>%
               add_ribbons(
                 data = d,
-                x = ~DT_round_MT,
+                x = ~DT_round,
                 ymin = ~TOC_guess_min,
                 ymax = ~TOC_guess_max,
                 fillcolor = "grey",
@@ -680,7 +684,7 @@ server <- function(input, output, session) {
             p <- p %>%
               add_lines(
                 data = d,
-                x = ~DT_round_MT,
+                x = ~DT_round,
                 y = ~.data[[plot_param]],
                 line = list(color = "#E70870", width = 2),
                 name = "Mean Model Estimate",
@@ -761,7 +765,7 @@ server <- function(input, output, session) {
         # add preliminary text to annotations
         # annotations_list <- append(annotations_list,
         #                            list(
-        #                              x = max(site_toc_data$DT_round_MT, na.rm = TRUE),
+        #                              x = max(site_toc_data$DT_round, na.rm = TRUE),
         #                              y = y_max * 0.85,
         #                              text = "PRELIMINARY RESULTS",
         #                              showarrow = FALSE,
