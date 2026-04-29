@@ -71,12 +71,11 @@ server <- function(input, output, session) {
     withProgress(message = "Dashboard Initialization", detail = "Starting up...", value = 0, {
       
       print("--- STARTING DATA INITIALIZATION ---")
-      incProgress(0.1, detail = "Locating cached data files...")
+      incProgress(0.1, detail = "Retrieving pre-loaded data...")
       
-      print(paste("Downloading cached data from:", snapshot_url))
-      incProgress(0.1, detail = "Importing historical parquet data...")
-      cached_data <- arrow::read_parquet(snapshot_url, as_data_frame = TRUE)
-      print(paste("Cached data loaded successfully. Total records:", nrow(cached_data)))
+      # Use the data already loaded by the home module
+      cached_data <- home_state$cached_df()
+      print(paste("Pre-loaded data retrieved. Total records:", nrow(cached_data)))
       
       #### ---- WET API PULL ---- ####
       home_state$set_status("wet_api", "loading")

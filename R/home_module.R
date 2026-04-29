@@ -135,6 +135,51 @@ home_server <- function(id, loaded_data) {
       all_done = FALSE
     )
     
+    # Real-time TOC Estimate (Model-based) for the map
+    realtime_toc_snapshot <- reactive({
+      req(snapshot_data())
+      
+      # We need FDOM, Temp, SC, Turbidity, Chl-a for the model
+      # Sites pman_fc and pbr_fc do not have FDOM
+      sensor_snapshot <- snapshot_data() %>%
+        filter(site %nin% c("pman_fc", "pbr_fc"))
+      
+      # Check if we have enough parameters to even try
+      params <- unique(sensor_snapshot$parameter)
+      required <- c("FDOM Fluorescence", "Temperature", "Specific Conductivity", "Turbidity")
+      
+      if (!all(required %in% params)) return(NULL)
+      
+      tryCatch({
+        # Run the model on the snapshot
+        # We need canyon_q which might not be loaded yet in the main server, 
+        # but apply_toc_model has a fallback to pull it if NULL.
+        res <- apply_toc_model(
+          sensor_data = sensor_snapshot,
+          toc_model_file_path = "data/models/ross_only_toc_xgboost_models_light_20260224.rds",
+          scaling_params_file_path = "data/models/scaling_params_toc_20260224.parquet",
+          summarize_interval = "15 mins", # Match the choices in the ui
+          time_col = "DT_round",
+          value_col = "mean"
+        )
+        
+        if (nrow(res) > 0) {
+          res %>%
+            select(site, DT_round, mean = TOC_guess_ensemble) %>%
+            mutate(
+              parameter = "Estimated TOC",
+              units = "mg/L",
+              DT_round_MT = with_tz(DT_round, tzone = "America/Denver")
+            )
+        } else {
+          NULL
+        }
+      }, error = function(e) {
+        warning("Real-time TOC snapshot calculation failed: ", e$message)
+        NULL
+      })
+    })
+    
     output$sync_checklist <- renderUI({
       get_icon <- function(status) {
         if (status == "pending") return(icon("circle", class = "text-muted"))
@@ -188,27 +233,10 @@ home_server <- function(id, loaded_data) {
         slice(1) %>%
         ungroup()
 
-      # Add TOC forecasts if they are loaded
-      if (!is.null(distributed_toc_data())) {
-        try({
-          latest_toc <- distributed_toc_data() %>%
-            filter(date_24h == Sys.Date() | date_24h == max(date_24h, na.rm = TRUE)) %>%
-            group_by(site_code) %>%
-            slice(1) %>%
-            ungroup() %>%
-            mutate(
-              site = tolower(site_code),
-              site = ifelse(site %in% c("pman", "pbr"), paste0(site, "_fc"), site)
-            ) %>%
-            select(site, mean = dist_mean_pred_toc) %>%
-            mutate(
-              parameter = "Estimated TOC",
-              units = "mg/L",
-              DT_round_MT = max(latest_readings$DT_round_MT, na.rm = TRUE)
-            )
-          
-          latest_readings <- bind_rows(latest_readings, latest_toc)
-        }, silent = TRUE)
+      # Add Modeled TOC estimates if available
+      rt_toc <- realtime_toc_snapshot()
+      if (!is.null(rt_toc) && nrow(rt_toc) > 0) {
+        latest_readings <- bind_rows(latest_readings, rt_toc)
       }
 
       snapshot_timestamp <- max(latest_readings$DT_round_MT, na.rm = TRUE)
@@ -331,14 +359,25 @@ home_server <- function(id, loaded_data) {
     # Render Intake TOC Forecast Plot
     output$intake_toc_forecast_plot <- renderPlotly({
       req(intake_forecast_data())
-      plot_toc_forecast(intake_forecast_data(), title_suffix = "System-Wide Intake Forecast")
+      
+      intake_cached_data <- intake_forecast_data() %>%
+        filter(date == max(date, na.rm = TRUE)) %>% # Get the most recent forecast date
+        mutate(across(contains("intake_q_swe_pred"), ~ round(.x, 2))) %>%
+        filter(date_24h <= Sys.Date() + days(10)) #Limit to the next 10 days
+        
+      plot_toc_forecast(intake_cached_data)
     })
     
     return(list(
       start_sync = reactive({ input$start_sync }),
       set_status = function(step, status) { sync_status[[step]] <- status },
       full_sync_done = reactive({ sync_status$all_done }),
-      snapshot_ready = reactive({ !is.null(snapshot_data()) })
+      snapshot_ready = reactive({ !is.null(snapshot_data()) }),
+      cached_df = reactive({
+        # Return the full dataset that was loaded for the snapshot
+        # This will be available to the main server to avoid re-downloading
+        arrow::read_parquet(snapshot_url, as_data_frame = TRUE)
+      })
     ))
   })
 }
