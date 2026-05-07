@@ -17,7 +17,6 @@ canyon_q <- cdssr::get_telemetry_ts(abbrev = "CLAFTCCO",
       summarize(canyon_mouth_daily_flow_cfs = mean(meas_value, na.rm = TRUE), .by = date)
 
 res <- apply_toc_model(df, 
-  toc_model_file_path = "data/models/ross_only_toc_xgboost_models_light_20260224.rds",
   scaling_params_file_path = "data/models/scaling_params_toc_20260224.parquet",
   canyon_q_data = canyon_q)
 

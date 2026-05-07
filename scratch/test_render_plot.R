@@ -84,7 +84,6 @@ canyon_q <- NULL
 
 toc_plot_data <- apply_toc_model(
   sensor_data = input_data_toc,
-  toc_model_file_path = "data/models/ross_only_toc_xgboost_models_light_20260224.rds",
   scaling_params_file_path = "data/models/scaling_params_toc_20260224.parquet",
   summarize_interval = input_data_timestep,
   time_col = "DT_round",

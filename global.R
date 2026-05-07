@@ -123,3 +123,8 @@ toc_model_bounds <- water_chem%>%
 
 toc_forecast_sites <- read_csv("data/toc_forecast_location_metadata.csv", show_col_types = F)%>%filter(model_version == "Distributed")
 
+# Load TOC real-time model ensemble
+toc_realtime_model <- map(1:3, ~xgb.load(
+  modelfile = paste0("data/models/ross_only_toc_xgboost_model_fold", .x, "_20260224.ubj")
+))
+

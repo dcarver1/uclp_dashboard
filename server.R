@@ -575,7 +575,7 @@ server <- function(input, output, session) {
     }
     # Apply TOC model on relevant data
     toc_plot_data <- apply_toc_model(sensor_data = input_data,
-                                     toc_model_file_path = "data/models/ross_only_toc_xgboost_models_light_20260224.rds",
+                                     #toc_model_file_path = "data/models/ross_only_toc_xgboost_models_light_20260224.rds",
                                      scaling_params_file_path = "data/models/scaling_params_toc_20260224.parquet",
                                      #summarizing model input results to user selected timestep (15 min -> 1 day)
                                      summarize_interval = input$data_timestep,

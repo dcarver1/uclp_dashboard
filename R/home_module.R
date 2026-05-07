@@ -156,7 +156,6 @@ home_server <- function(id, loaded_data) {
         # but apply_toc_model has a fallback to pull it if NULL.
         res <- apply_toc_model(
           sensor_data = sensor_snapshot,
-          toc_model_file_path = "data/models/ross_only_toc_xgboost_models_light_20260224.rds",
           scaling_params_file_path = "data/models/scaling_params_toc_20260224.parquet",
           summarize_interval = "15 mins", # Match the choices in the ui
           time_col = "DT_round",
