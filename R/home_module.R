@@ -230,6 +230,7 @@ home_server <- function(id, loaded_data) {
       req(data_to_use, nrow(data_to_use) > 0)
       
       latest_readings <- data_to_use %>%
+        apply_cleaning_filters() %>%
         mutate(DT_round_MT = with_tz(DT_round, tzone = "America/Denver")) %>%
         group_by(site, parameter) %>%
         filter(DT_round == max(DT_round, na.rm = TRUE)) %>%
@@ -297,17 +298,17 @@ home_server <- function(id, loaded_data) {
 
       # Define Color Palettes (moved inside observe for proxy)
       if (target_param == "pH") {
-        pal <- colorBin(palette = c("red", "orange", "green", "orange", "red"), bins = c(0, 6.8, 7.0, 8.3, 8.8, 14), domain = c(0, 14), na.color = "#a9a9a9")
+        pal <- colorBin(palette = c("red", "orange", "green", "orange", "red"), bins = c(0, 6.8, 7.0, 8.3, 8.8, 14), domain = c(0, 14), na.color = "#D3D3D3")
       } else if (target_param == "Turbidity") {
-        pal <- colorBin(palette = c("green", "orange", "red"), bins = c(0, 30, 50, Inf), domain = c(0, 1000), na.color = "#a9a9a9")
+        pal <- colorBin(palette = c("green", "orange", "red"), bins = c(0, 30, 50, Inf), domain = c(0, 1000), na.color = "#D3D3D3")
       } else if (target_param == "Specific Conductivity") {
-        pal <- colorBin(palette = c("green", "orange", "red"), bins = c(0, 90, 100, Inf), domain = c(0, 500), na.color = "#a9a9a9")
+        pal <- colorBin(palette = c("green", "orange", "red"), bins = c(0, 90, 100, Inf), domain = c(0, 500), na.color = "#D3D3D3")
       } else if (target_param == "DO") {
-        pal <- colorBin(palette = c("red", "orange", "green"), bins = c(0, 6, 7, Inf), domain = c(0, 20), na.color = "#a9a9a9")
+        pal <- colorBin(palette = c("red", "orange", "green"), bins = c(0, 6, 7, Inf), domain = c(0, 20), na.color = "#D3D3D3")
       } else if (target_param == "Estimated TOC") {
-        pal <- colorBin(palette = c("green", "orange", "red"), bins = c(0, 4, 8, Inf), domain = c(0, 20), na.color = "#a9a9a9")
+        pal <- colorBin(palette = c("green", "orange", "red"), bins = c(0, 4, 8, Inf), domain = c(0, 20), na.color = "#D3D3D3")
       } else {
-        pal <- colorNumeric(palette = "viridis", domain = map_data$numeric_val, na.color = "#a9a9a9")
+        pal <- colorNumeric(palette = "viridis", domain = map_data$numeric_val, na.color = "#D3D3D3")
       }
       
       leafletProxy("home_map") %>%
@@ -325,6 +326,12 @@ home_server <- function(id, loaded_data) {
           position = "bottomright", pal = pal,
           values = map_data$numeric_val[!is.na(map_data$numeric_val)], 
           title = paste(target_param), opacity = 1
+        ) %>%
+        addLegend(
+          position = "bottomright", 
+          colors = "#D3D3D3", 
+          labels = "No Data",
+          opacity = 1
         ) %>%
         addControl(
           html = paste0("<div style='background: rgba(255,255,255,0.9); padding: 10px 15px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.2);'>",

@@ -76,53 +76,82 @@ ui <- # secure_app( #wrap in secure_app for authentication with shiny_manager. U
                   box(
                     title = "Data Controls", status = "primary", solidHeader = TRUE, width = 12,
                     fluidRow(
-                      column(4,
-                             dateRangeInput("date_range",
-                                            label = "Select Date Range:",
-                                            start = Sys.Date() - days(7),
-                                            end = Sys.Date(),
-                                            max = Sys.Date()
-                             ),
-                             pickerInput("sites_select",
-                                         label = "Select Sites:",
-                                         choices = c("South Fork CLP", "Chambers Lake Outflow", "CLP at Poudre Falls", "Canyon Mouth", "CLP at Indian Meadows", "CLP at Manners Bridge"),
-                                         selected = c("South Fork CLP", "Chambers Lake Outflow", "CLP at Poudre Falls", "Canyon Mouth", "CLP at Indian Meadows", "CLP at Manners Bridge"),
-                                         multiple = TRUE,
-                                         options = pickerOptions(
-                                           actionsBox = TRUE,
-                                           selectAllText = "Select All",
-                                           deselectAllText = "Deselect All"
-                                         )
+                      column(6,
+                             div(style = "background-color: #f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; height: 100%;",
+                               h4("Data Selection", style = "margin-top: 0; margin-bottom: 10px;"),
+                               p("Note: Changes to Date Range, Sites, and Parameters require pressing the 'Load Data' button to take effect.", style = "font-style: italic; color: #666; margin-bottom: 15px;"),
+                               fluidRow(
+                                 column(6,
+                                   dateRangeInput("date_range",
+                                                  label = "Select Date Range:",
+                                                  start = Sys.Date() - days(7),
+                                                  end = Sys.Date(),
+                                                  max = Sys.Date()
+                                   )
+                                 ),
+                                 column(6,
+                                   pickerInput("sites_select",
+                                               label = "Select Sites:",
+                                               choices = c("South Fork CLP", "Chambers Lake Outflow", "CLP at Poudre Falls", "Canyon Mouth", "CLP at Indian Meadows", "CLP at Manners Bridge"),
+                                               selected = c("South Fork CLP", "Chambers Lake Outflow", "CLP at Poudre Falls", "Canyon Mouth", "CLP at Indian Meadows", "CLP at Manners Bridge"),
+                                               multiple = TRUE,
+                                               options = pickerOptions(
+                                                 actionsBox = TRUE,
+                                                 selectAllText = "Select All",
+                                                 deselectAllText = "Deselect All"
+                                               )
+                                   )
+                                 )
+                               ),
+                               fluidRow(
+                                 column(12,
+                                   pickerInput("parameters_select",
+                                               label = "Select Parameters:",
+                                               choices = c("Temperature", "Turbidity", "pH", "DO",
+                                                           "Specific Conductivity", "Chl-a Fluorescence", "FDOM Fluorescence", "Depth"),
+                                               selected = c("Temperature", "Turbidity","Specific Conductivity", "Chl-a Fluorescence", "FDOM Fluorescence"),
+                                               multiple = TRUE,
+                                               width = "100%",
+                                               options = pickerOptions(
+                                                 actionsBox = TRUE,
+                                                 selectAllText = "Select All",
+                                                 deselectAllText = "Deselect All"
+                                               )
+                                   )
+                                 )
+                               ),
+                               div(style = "text-align: center; margin-top: 10px;",
+                                 actionBttn("load_data",
+                                            "Load Data",
+                                            color = "primary",
+                                            style = "fill",
+                                            size = "md")
+                               )
                              )
                       ),
-                      column(4,
-                             pickerInput("parameters_select",
-                                         label = "Select Parameters:",
-                                         choices = c("Temperature", "Turbidity", "pH", "DO",
-                                                     "Specific Conductivity", "Chl-a Fluorescence", "FDOM Fluorescence", "Depth"),
-                                         selected = c("Temperature", "Turbidity","Specific Conductivity", "Chl-a Fluorescence", "FDOM Fluorescence"),
-                                         multiple = TRUE,
-                                         options = pickerOptions(
-                                           actionsBox = TRUE,
-                                           selectAllText = "Select All",
-                                           deselectAllText = "Deselect All"
-                                         )
-                             ),
-
-                             selectInput("data_timestep", "Summarizing Time Step",
-                                         choices = c("15 mins", "1 hour", "3 hours", "6 hours", "12 hours", "1 day"),
-                                         selected = "1 hour"),
-
-                             uiOutput("dynamic_load_button"),
-                      ),
-                      column(4,
-                             h4("Log Scale Controls:"),
-                             br(),
-                             uiOutput("log_controls"),
-                             br()#,
-                            #Download currently disabled
-                             #downloadButton("download_data", "Download Data",
-                             #               class = "btn-success")
+                      column(6,
+                             div(style = "background-color: #fefefe; padding: 15px; border-radius: 5px; border: 1px solid #eee; height: 100%;",
+                               h4("Visualization Controls", style = "margin-top: 0; margin-bottom: 10px;"),
+                               p("These changes apply instantly to the current dataset.", style = "font-style: italic; color: #666; margin-bottom: 15px;"),
+                               fluidRow(
+                                 column(6,
+                                   selectInput("data_timestep", "Summarizing Time Step",
+                                               choices = c("15 mins", "1 hour", "3 hours", "6 hours", "12 hours", "1 day"),
+                                               selected = "1 hour")
+                                 ),
+                                 column(6,
+                                   div(style = "margin-top: 25px;",
+                                     switchInput("apply_qaqc_filter",
+                                                 "Apply Data QAQC Filters",
+                                                 value = TRUE,
+                                                 inline = TRUE)
+                                   )
+                                 )
+                               ),
+                               hr(style = "margin-top: 10px; margin-bottom: 15px;"),
+                               h5("Log Scale Controls:", style = "font-weight: bold; margin-top: 0;"),
+                               uiOutput("log_controls")
+                             )
                       )
                     )
                   )

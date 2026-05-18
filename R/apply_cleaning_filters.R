@@ -25,7 +25,8 @@ apply_cleaning_filters <- function(df, value_col = "mean", new_value_col = "mean
    df %>%
     mutate(
       !!sym(new_value_col) := case_when(
-        !is.na(mal_flag) ~ NA,
+        !is.na(mal_flag) ~ NA_real_,
+        !is.na(auto_flag) & str_detect(auto_flag, regex("unsubmerged", ignore_case = TRUE)) ~ NA_real_,
         !is.na(auto_flag) & parameter == "FDOM Fluorescence" & auto_flag == "drift" ~ !!sym(value_col), # FDOM sensor over flagged for downwards drift
         !is.na(auto_flag) & parameter == "FDOM Fluorescence" & auto_flag == "outside of seasonal range" ~ !!sym(value_col), # FDOM sensor over flagged for seasonal range due to lack of data
         !is.na(auto_flag) & parameter == "FDOM Fluorescence" & auto_flag == "slope violation" & season == "winter_baseflow" ~ !!sym(value_col), # FDOM sensor over flagged for seasonal range in winter baseflow due to lack of data

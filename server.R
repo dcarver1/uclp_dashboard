@@ -48,20 +48,6 @@ server <- function(input, output, session) {
     last_refresh = Sys.time()
   )
 
-  output$dynamic_load_button <- renderUI({
-    div(
-      actionBttn("load_data",
-                 "Load Data",
-                 color = "default",
-                 style = "fill",
-                 size = "lg"),
-      switchInput("apply_qaqc_filter",
-                  "Apply Data QAQC Filters",
-                  value = TRUE,
-                  inline = TRUE)
-    )
-  })
-
 #TODO: This is done at load up, should it be moved to global?
   #### Pre loading API/Cached Data ####
   observeEvent(home_state$start_sync(), {
