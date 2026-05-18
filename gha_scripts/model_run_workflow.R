@@ -145,8 +145,8 @@ dist_forecast <- dist_input %>%
     dist_mean_pred_toc = mean(pred_toc),
     dist_min_pred_toc  = min(pred_toc),
     dist_max_pred_toc  = max(pred_toc),
-    dist_q25_pred_toc  = quantile(pred_toc, 0.25),
-    dist_q75_pred_toc  = quantile(pred_toc, 0.75),
+    dist_q25_pred_toc  = quantile(pred_toc, 0.25, na.rm = T),
+    dist_q75_pred_toc  = quantile(pred_toc, 0.75, na.rm = T),
     .by = c(date, site_code, site_name, date_24h)
   ) %>%
   mutate(model_version = "Distributed")
@@ -176,8 +176,8 @@ intake_forecast <- intake_input %>%
   summarize(
     intake_q_swe_pred_min = min(intake_q_swe_pred, na.rm = T),
     intake_q_swe_pred_max = max(intake_q_swe_pred, na.rm = T),
-    intake_q_swe_pred_q25 = quantile(intake_q_swe_pred, 0.25),
-    intake_q_swe_pred_q75 = quantile(intake_q_swe_pred, 0.75),
+    intake_q_swe_pred_q25 = quantile(intake_q_swe_pred, 0.25, na.rm = T),
+    intake_q_swe_pred_q75 = quantile(intake_q_swe_pred, 0.75, na.rm = T),
     intake_q_swe_pred     = mean(intake_q_swe_pred),
     .by = c(date, date_24h)
   ) %>%
